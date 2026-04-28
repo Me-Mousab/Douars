@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Délimitation des Douars</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    :root {
+      --bg-dark: #0f172a; --bg-card: #1e293b; --text-main: #e2e8f0; --text-muted: #94a3b8;
+      --accent: #3b82f6; --accent-hover: #2563eb; --highlight: #f59e0b; --border: #334155;
+      --sidebar-width: 300px; --success: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-dark); color: var(--text-main); height: 100vh; overflow: hidden; }
+    .dashboard { display: flex; height: 100vh; }
+    .sidebar { width: var(--sidebar-width); background: var(--bg-card); border-right: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+    .main { flex: 1; display: flex; flex-direction: column; height: 100vh; }
+    .logo { font-size: 1.3rem; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+    .search-box { position: relative; }
+    .search-box input { width: 100%; padding: 10px 12px 10px 35px; background: #0f172a; border: 1px solid var(--border); color: var(--text-main); border-radius: 8px; font-size: 0.9rem; }
+    .search-box input:focus { outline: none; border-color: var(--accent); }
+    .search-box i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+    .legend-panel, .layer-panel { background: #0f172a; padding: 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 0.85rem; }
+    .layer-panel h3, .legend-panel h3 { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 0.5px; }
+    .base-map-group { display: flex; gap: 5px; margin-bottom: 10px; }
+    .base-btn { flex: 1; padding: 6px; background: #1e293b; border: 1px solid var(--border); color: var(--text-muted); border-radius: 6px; cursor: pointer; font-size: 0.75rem; transition: 0.2s; }
+    .base-btn:hover { background: #334155; }
+    .base-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .overlay-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; cursor: pointer; font-size: 0.85rem; }
+    .overlay-toggle input { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; }
+    .overlay-toggle:has(input:disabled) { opacity: 0.5; cursor: not-allowed; }
+    .layer-status { font-size: 0.7rem; color: var(--text-muted); margin-left: auto; }
+    .controls { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+    .btn { padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-success { background: var(--success); color: white; }
+    .btn-success:hover { background: #059669; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
+    .btn-outline:hover { background: var(--border); }
+
+    .kpi-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 15px; padding: 15px; background: var(--bg-card); border-bottom: 1px solid var(--border); }
+    .kpi-card { background: #0f172a; padding: 15px; border-radius: 10px; border: 1px solid var(--border); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+    .kpi-card i { font-size: 1.4rem; color: var(--accent); margin-bottom: 2px; }
+    .kpi-card span { font-size: 1.6rem; font-weight: 700; }
+    .kpi-card small { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .map-wrapper { flex: 1; position: relative; background: #0f172a; }
+    #map { width: 100%; height: 100%; }
+    .map-title { position: absolute; top: 10px; left: 10px; background: rgba(30,41,59,0.9); padding: 6px 10px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; z-index: 1000; backdrop-filter: blur(4px); border: 1px solid var(--border); }
+    .coord-grid { position: absolute; bottom: 10px; left: 10px; background: rgba(30,41,59,0.9); padding: 5px 8px; border-radius: 4px; font-size: 0.7rem; z-index: 1000; color: var(--text-muted); }
+
+    .table-container { height: 220px; background: var(--bg-card); border-top: 1px solid var(--border); overflow: auto; padding: 0 15px; }
+    #douars-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    #douars-table th { background: #0f172a; position: sticky; top: 0; padding: 10px; text-align: left; color: var(--text-muted); font-weight: 600; border-bottom: 1px solid var(--border); }
+    #douars-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px; }
+    #douars-table tr { cursor: pointer; transition: 0.1s; }
+    #douars-table tr:hover, #douars-table tr.active { background: rgba(59,130,246,0.15); }
+    .table-btn { background: var(--accent); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.7rem; }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.85); backdrop-filter: blur(5px); display: flex; align-items: center; justify-content: center; z-index: 3000; opacity: 0; pointer-events: none; transition: 0.3s; }
+    .modal-overlay.active { opacity: 1; pointer-events: auto; }
+    .modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 25px; width: 90%; max-width: 700px; max-height: 80vh; overflow-y: auto; position: relative; transform: translateY(20px); transition: 0.3s; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .modal-overlay.active .modal { transform: translateY(0); }
+    .modal-close { position: absolute; top: 15px; right: 15px; background: none; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer; transition: 0.2s; }
+    .modal-close:hover { color: #ef4444; }
+    .modal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin: 15px 0; }
+    .modal-item { background: #0f172a; padding: 10px; border-radius: 8px; border: 1px solid var(--border); }
+    .modal-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; margin-bottom: 4px; }
+    .modal-value { font-size: 0.9rem; font-weight: 500; word-break: break-word; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border); }
+
+    #loader { position: fixed; inset: 0; background: var(--bg-dark); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; }
+    .spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Table de coordonnées dans modal */
+    .coord-preview-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 0.8rem; }
+    .coord-preview-table th { background: #1e293b; padding: 8px; text-align: left; border-bottom: 2px solid var(--border); }
+    .coord-preview-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+  <div id="loader"><div class="spinner"></div><div>Initialisation Dashboard & Couches...</div></div>
+
+  <div class="dashboard">
+    <aside class="sidebar">
+      <div class="logo"><i class="fa-solid fa-layer-group"></i> Dashboard Douars</div>
+      <div class="search-box"><i class="fa-solid fa-magnifying-glass"></i><input type="text" id="search-input" placeholder="Rechercher nom, code, commune..."></div>
+      <div class="layer-panel">
+        <h3>Fond de carte</h3>
+        <div class="base-map-group">
+          <button class="base-btn active" data-layer="Plan">Plan</button>
+          <button class="base-btn" data-layer="Satellite">Satellite</button>
+          <button class="base-btn" data-layer="Sombre">Sombre</button>
+        </div>
+        <h3 style="margin-top:10px;">Couches thématiques</h3>
+        <label class="overlay-toggle"><input type="checkbox" id="toggle-commune" disabled> Communes <span class="layer-status" id="status-commune">⏳ Chargement...</span></label>
+        <label class="overlay-toggle"><input type="checkbox" id="toggle-zone" disabled> Zones Remembrées <span class="layer-status" id="status-zone">⏳ Chargement...</span></label>
+      </div>
+      <div class="legend-panel"><h3>Légende</h3><div id="legend-container"></div></div>
+      <div class="controls">
+        <button class="btn btn-outline" id="reset-view"><i class="fa-solid fa-crosshairs"></i> Réinitialiser</button>
+        <button class="btn btn-success" id="export-coords"><i class="fa-solid fa-file-excel"></i> Exporter Coordonnées (Excel)</button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="kpi-strip">
+        <div class="kpi-card"><i class="fa-solid fa-layer-group"></i><span id="kpi-total">0</span><small>Total Douars</small></div>
+        <div class="kpi-card"><i class="fa-solid fa-ruler-combined"></i><span id="kpi-area">0</span><small>Surface Totale (ha)</small></div>
+        <div class="kpi-card"><i class="fa-solid fa-map-location-dot"></i><span id="kpi-communes">0</span><small>Communes</small></div>
+        <div class="kpi-card"><i class="fa-solid fa-chart-pie"></i><span id="kpi-avg">0</span><small>Surface Moy. (ha)</small></div>
+      </div>
+
+      <div class="map-wrapper">
+        <div class="map-title">Délimitation des Douars - Maroc Nord</div>
+        <div id="map"></div>
+        <div class="coord-grid" id="coord-display">Lat: -- | Lon: --</div>
+      </div>
+
+      <div class="table-container">
+        <table id="douars-table">
+          <thead><tr><th>Nom</th><th>Code</th><th>Commune</th><th>Surface (ha)</th><th>Action</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal Détails -->
+  <div class="modal-overlay" id="modal-details">
+    <div class="modal">
+      <button class="modal-close" onclick="closeModal('modal-details')"><i class="fa-solid fa-xmark"></i></button>
+      <h2 id="modal-title">Détails du Douar</h2>
+      <div class="modal-grid" id="modal-grid"></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="modal-zoom"><i class="fa-solid fa-expand"></i> Zoomer</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-details')"><i class="fa-solid fa-times"></i> Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Coordonnées -->
+  <div class="modal-overlay" id="modal-coords">
+    <div class="modal" style="max-width: 900px;">
+      <button class="modal-close" onclick="closeModal('modal-coords')"><i class="fa-solid fa-xmark"></i></button>
+      <h2><i class="fa-solid fa-location-dot"></i> Table des Coordonnées Topographiques</h2>
+      <p style="font-size:0.8rem; color:var(--text-muted); margin:5px 0 10px;">Système de projection : <strong>Merchich Maroc Nord 1 (EPSG:26191)</strong> | Unités : mètres</p>
+      <div id="coords-table-container" style="max-height: 400px; overflow-y: auto; margin-bottom: 15px;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-success" id="download-excel"><i class="fa-solid fa-download"></i> Télécharger .xlsx</button>
+        <button class="btn btn-outline" onclick="closeModal('modal-coords')"><i class="fa-solid fa-times"></i> Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+  <script>
+    // 1. Projection
+    proj4.defs('EPSG:26191', '+proj=lcc +lat_1=33.3 +lat_0=33.3 +lon_0=-5.4 +k_0=0.999625769 +x_0=500000 +y_0=300000 +a=6376896.84 +b=6355743.18 +towgs84=31,146,47,0,0,0,0 +units=m +no_defs');
+    proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+
+    const transformGeoJSON = (gj) => {
+      const t = c => proj4('EPSG:26191', 'EPSG:4326', c);
+      const ring = r => r.map(t);
+      return JSON.parse(JSON.stringify(gj)).features?.map(f => {
+        if (f.geometry.type === 'Polygon') f.geometry.coordinates = f.geometry.coordinates.map(ring);
+        else if (f.geometry.type === 'MultiPolygon') f.geometry.coordinates = f.geometry.coordinates.map(p => p.map(ring));
+        return f;
+      });
+    };
+
+    // 2. Map & Base Layers
+    const map = L.map('map', { zoomControl: false }).setView([34.0, -5.5], 10);
+    L.control.zoom({ position: 'topright' }).addTo(map);
+    L.control.scale({ position: 'bottomleft', maxWidth: 150 }).addTo(map);
+
+    const baseLayers = {
+      "Plan": L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM', crossOrigin: 'anonymous' }),
+      "Satellite": L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri', crossOrigin: 'anonymous' }),
+      "Sombre": L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© CARTO', crossOrigin: 'anonymous' })
+    };
+    let currentBase = baseLayers["Plan"];
+    currentBase.addTo(map);
+
+    document.querySelectorAll('.base-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.base-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        map.removeLayer(currentBase);
+        currentBase = baseLayers[btn.dataset.layer];
+        currentBase.addTo(map);
+      });
+    });
+
+    // 3. State
+    let douarsLayer, originalFeatures = [], currentSelectedLayer = null;
+    let communeLayer = null, zoneRemembreeLayer = null;
+    let coordinateData = []; // Stockage pour export
+
+    // 4. Load Data
+    async function loadData() {
+      try {
+        const [douarsRes, communeRes, zoneRes] = await Promise.allSettled([
+          fetch('Délimitation des Douars.geojson'),
+          fetch('Communes.geojson').catch(() => null),
+          fetch('Zone Remembrée.geojson').catch(() => null)
+        ]);
+
+        if(douarsRes.status === 'fulfilled' && douarsRes.value.ok) {
+          const transformed = transformGeoJSON(await douarsRes.value.json());
+          originalFeatures = transformed;
+          douarsLayer = L.geoJSON(transformed, {
+            style: () => ({ color: '#3b82f6', weight: 2, fillColor: '#93c5fd', fillOpacity: 0.6 }),
+            onEachFeature: (f, l) => l.on('click', () => selectFeature(f))
+          }).addTo(map);
+          map.fitBounds(douarsLayer.getBounds(), { padding: [20, 20] });
+          updateDashboard(originalFeatures);
+        }
+
+        if(communeRes.status === 'fulfilled' && communeRes.value) {
+          const data = await communeRes.value.json();
+          communeLayer = L.geoJSON(transformGeoJSON(data), {
+            style: () => ({ color: '#e11d48', weight: 2, dashArray: '5,5', fillColor: 'transparent' }),
+            onEachFeature: (f, l) => l.bindPopup(`<b>Commune:</b> ${f.properties.nom_commune || f.properties.COMMUNE || 'N/A'}`)
+          });
+          document.getElementById('toggle-commune').disabled = false;
+          document.getElementById('status-commune').textContent = '✅ Prêt';
+        }
+
+        if(zoneRes.status === 'fulfilled' && zoneRes.value) {
+          const data = await zoneRes.value.json();
+          zoneRemembreeLayer = L.geoJSON(transformGeoJSON(data), {
+            style: () => ({ color: '#059669', weight: 2, fillColor: '#34d399', fillOpacity: 0.25 }),
+            onEachFeature: (f, l) => l.bindPopup(`<b>Zone:</b> ${f.properties.nom_zone || f.properties.ZONE || 'N/A'}`)
+          });
+          document.getElementById('toggle-zone').disabled = false;
+          document.getElementById('status-zone').textContent = '✅ Prêt';
+        }
+        updateLegend();
+        document.getElementById('loader').style.display = 'none';
+      } catch(err) {
+        document.getElementById('loader').innerHTML = `<div style="color:#ef4444; text-align:center;">❌ Erreur chargement<br>⚠️ Serveur local requis (CORS)</div>`;
+      }
+    }
+
+    document.getElementById('toggle-commune').addEventListener('change', e => { if(e.target.checked) communeLayer?.addTo(map); else map.removeLayer(communeLayer); updateLegend(); });
+    document.getElementById('toggle-zone').addEventListener('change', e => { if(e.target.checked) zoneRemembreeLayer?.addTo(map); else map.removeLayer(zoneRemembreeLayer); updateLegend(); });
+
+    // 5. KPI & Table
+    function animateValue(id, end) {
+      const obj = document.getElementById(id); let start = 0, startTime = null;
+      const step = ts => { if (!startTime) startTime = ts; const prog = Math.min((ts-startTime)/800,1); obj.textContent = Math.floor(prog*end).toLocaleString('fr-FR'); if(prog<1) requestAnimationFrame(step); };
+      requestAnimationFrame(step);
+    }
+    function updateDashboard(features) {
+      const total = features.length;
+      const communes = new Set(features.map(f => f.properties.commune || f.properties.COMMUNE || 'N/A'));
+      let totalArea = 0;
+      features.forEach(f => totalArea += parseFloat(f.properties.surface || f.properties.surface_ha || f.properties.SURF_HA || 0) || 0);
+      animateValue('kpi-total', total); animateValue('kpi-area', Math.round(totalArea));
+      document.getElementById('kpi-communes').textContent = communes.size;
+      animateValue('kpi-avg', total > 0 ? Math.round(totalArea / total) : 0);
+      buildTable(features);
+    }
+    function buildTable(features) {
+      const tbody = document.querySelector('#douars-table tbody'); tbody.innerHTML = '';
+      features.forEach(f => {
+        const p = f.properties;
+        const row = document.createElement('tr');
+        row.innerHTML = `<td>${p.nom_douar||p.NOM_DOUAR||p.Name||'-'}</td><td>${p.code||p.CODE||'-'}</td><td>${p.commune||p.COMMUNE||'-'}</td><td>${parseFloat(p.surface||p.surface_ha||0).toFixed(1)}</td><td><button class="table-btn"><i class="fa-solid fa-eye"></i></button></td>`;
+        row.addEventListener('click', () => selectFeature(f, row));
+        row.querySelector('.table-btn').addEventListener('click', e => { e.stopPropagation(); selectFeature(f, row); });
+        tbody.appendChild(row);
+      });
+    }
+    function selectFeature(feature, rowEl) {
+      document.querySelectorAll('#douars-table tr').forEach(r => r.classList.remove('active'));
+      if(rowEl) rowEl.classList.add('active');
+      if(currentSelectedLayer) currentSelectedLayer.setStyle({ color: '#3b82f6', weight: 2, fillColor: '#93c5fd', fillOpacity: 0.6 });
+      douarsLayer.eachLayer(l => { if(l.feature === feature) currentSelectedLayer = l; });
+      if(currentSelectedLayer) {
+        currentSelectedLayer.setStyle({ weight: 4, color: '#f59e0b', fillColor: '#fde68a', fillOpacity: 0.8 });
+        map.fitBounds(currentSelectedLayer.getBounds(), { padding: [40, 40] });
+      }
+      openDetailsModal(feature);
+    }
+
+    // 6. Modals
+    function openDetailsModal(feature) {
+      const p = feature.properties;
+      document.getElementById('modal-title').textContent = p.nom_douar || p.NOM_DOUAR || p.Name || 'Détails';
+      document.getElementById('modal-grid').innerHTML = Object.entries(p).filter(([k,v])=>v!==null&&v!==undefined).map(([k,v])=>`<div class="modal-item"><div class="modal-label">${k}</div><div class="modal-value">${v}</div></div>`).join('');
+      document.getElementById('modal-details').classList.add('active');
+    }
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('active');
+      if(id==='modal-details' && currentSelectedLayer) currentSelectedLayer.setStyle({ color: '#3b82f6', weight: 2, fillColor: '#93c5fd', fillOpacity: 0.6 });
+      currentSelectedLayer = null;
+      document.querySelectorAll('#douars-table tr.active').forEach(r => r.classList.remove('active'));
+    }
+    document.getElementById('modal-details').addEventListener('click', e => { if(e.target===e.currentTarget) closeModal('modal-details'); });
+    document.getElementById('modal-zoom').addEventListener('click', () => { if(currentSelectedLayer) map.fitBounds(currentSelectedLayer.getBounds(), { padding: [50,50] }); });
+    document.addEventListener('keydown', e => { if(e.key==='Escape') { closeModal('modal-details'); closeModal('modal-coords'); } });
+
+    // 7. Legend
+    function updateLegend() {
+      const c = document.getElementById('legend-container');
+      let html = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><div style="width:14px;height:14px;background:#93c5fd;border:1px solid #475569;border-radius:3px;"></div>Douars</div>`;
+      if(communeLayer && map.hasLayer(communeLayer)) html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><div style="width:14px;height:14px;border:2px dashed #e11d48;border-radius:3px;"></div>Communes</div>`;
+      if(zoneRemembreeLayer && map.hasLayer(zoneRemembreeLayer)) html += `<div style="display:flex;align-items:center;gap:8px;"><div style="width:14px;height:14px;background:#34d399;border:1px solid #475569;border-radius:3px;"></div>Zones Remembrées</div>`;
+      c.innerHTML = html;
+    }
+
+    // 8. Search
+    document.getElementById('search-input').addEventListener('input', e => {
+      const term = e.target.value.toLowerCase().trim();
+      douarsLayer.clearLayers();
+      const filtered = originalFeatures.filter(f => Object.values(f.properties).some(v => String(v).toLowerCase().includes(term)));
+      L.geoJSON({ type: 'FeatureCollection', features: filtered }, {
+        style: () => term ? ({ color: '#f59e0b', weight: 3, fillColor: '#fde68a', fillOpacity: 0.7 }) : ({ color: '#3b82f6', weight: 2, fillColor: '#93c5fd', fillOpacity: 0.6 }),
+        onEachFeature: (f, l) => l.on('click', () => selectFeature(f))
+      }).addTo(douarsLayer);
+      if(filtered.length > 0) douarsLayer.fitBounds(douarsLayer.getBounds(), { padding: [20, 20] });
+      buildTable(filtered);
+    });
+
+    // 9. Coordinate Table & Excel Export
+    function generateCoordinates() {
+      coordinateData = [];
+      originalFeatures.forEach(f => {
+        const name = f.properties.nom_douar || f.properties.NOM_DOUAR || 'Inconnu';
+        const code = f.properties.code || f.properties.CODE || '-';
+        const geom = f.geometry;
+        let points = [];
+        if (geom.type === 'Polygon') points = geom.coordinates[0];
+        else if (geom.type === 'MultiPolygon') points = geom.coordinates[0][0];
+        
+        points.forEach((coord, idx) => {
+          const [x, y] = proj4('EPSG:4326', 'EPSG:26191', coord);
+          coordinateData.push({ 'Douar': name, 'Code': code, 'Point': `B${idx + 1}`, 'X (m)': parseFloat(x.toFixed(3)), 'Y (m)': parseFloat(y.toFixed(3)) });
+        });
+      });
+      return coordinateData;
+    }
+
+    document.getElementById('export-coords').addEventListener('click', () => {
+      if(!originalFeatures.length) return alert('Données non chargées.');
+      const data = generateCoordinates();
+      if(!data.length) return alert('Aucun polygone valide.');
+      
+      const container = document.getElementById('coords-table-container');
+      container.innerHTML = `<table class="coord-preview-table"><thead><tr><th>Douar</th><th>Code</th><th>Point</th><th>X (m)</th><th>Y (m)</th></tr></thead><tbody>${data.map(r=>`<tr><td>${r.Douar}</td><td>${r.Code}</td><td><strong>${r.Point}</strong></td><td>${r['X (m)']}</td><td>${r['Y (m)']}</td></tr>`).join('')}</tbody></table>`;
+      document.getElementById('modal-coords').classList.add('active');
+    });
+
+    document.getElementById('download-excel').addEventListener('click', () => {
+      if(!coordinateData.length) generateCoordinates();
+      const ws = XLSX.utils.json_to_sheet(coordinateData);
+      ws['!cols'] = [{ wch: 20 }, { wch: 10 }, { wch: 8 }, { wch: 12 }, { wch: 12 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Coordonnées_Douars");
+      XLSX.writeFile(wb, `Coordonnees_Douars_EPSG26191_${new Date().toISOString().slice(0,10)}.xlsx`);
+    });
+
+    // 10. Misc
+    document.getElementById('reset-view').addEventListener('click', () => { document.getElementById('search-input').value = ''; loadData(); });
+    map.on('mousemove', e => { document.getElementById('coord-display').textContent = `Lat: ${e.latlng.lat.toFixed(5)} | Lon: ${e.latlng.lng.toFixed(5)}`; });
+
+    loadData();
+  </script>
+</body>
+</html>

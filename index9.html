@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Dashboard - Délimitation des Douars</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    :root {
+      --primary: #1e40af; --primary-dark: #1e3a8a; --primary-light: #3b82f6;
+      --secondary: #059669; --accent: #f59e0b; --bg-dark: #0f172a;
+      --bg-card: #1e293b; --bg-light: #f8fafc; --text-main: #e2e8f0;
+      --text-muted: #94a3b8; --text-dark: #1e293b; --border: #334155;
+      --success: #10b981; --danger: #ef4444; --warning: #f59e0b;
+      --sidebar-width: 380px; --sidebar-min: 300px; --header-height: 60px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg-dark); color: var(--text-main); height: 100vh; overflow: hidden; }
+    .app-header { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; padding: 0 20px; height: var(--header-height); display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 1000; }
+    .app-header h1 { font-size: 1.3rem; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .app-header .subtitle { font-size: 0.8rem; opacity: 0.9; margin-left: 10px; }
+    .menu-toggle { display: none; background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer; }
+    .dashboard { display: flex; height: calc(100vh - var(--header-height)); }
+    .sidebar { width: var(--sidebar-width); background: var(--bg-card); border-right: 1px solid var(--border); padding: 15px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; transition: transform 0.3s ease; z-index: 100; }
+    .search-section { background: var(--bg-dark); padding: 15px; border-radius: 8px; border: 1px solid var(--border); border-left: 4px solid var(--primary); }
+    .search-section h3 { font-size: 0.75rem; text-transform: uppercase; color: var(--primary-light); margin-bottom: 12px; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px; }
+    .search-box { position: relative; margin-bottom: 10px; }
+    .search-box input { width: 100%; padding: 11px 12px 11px 38px; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; font-size: 0.9rem; transition: all 0.2s; }
+    .search-box input:focus { outline: none; border-color: var(--primary-light); box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+    .search-box i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+    .basemap-selector { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 15px; }
+    .basemap-option { position: relative; cursor: pointer; border-radius: 6px; overflow: hidden; border: 2px solid var(--border); transition: all 0.2s; }
+    .basemap-option:hover { border-color: var(--primary-light); }
+    .basemap-option input[type="radio"] { display: none; }
+    .basemap-option input[type="radio"]:checked + .basemap-preview { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-light); }
+    .basemap-preview { display: flex; flex-direction: column; align-items: center; padding: 8px; background: var(--bg-card); gap: 5px; }
+    .basemap-thumb { width: 100%; height: 50px; border-radius: 4px; background-size: cover; background-position: center; border: 1px solid var(--border); }
+    .basemap-label { font-size: 0.7rem; text-align: center; font-weight: 500; color: var(--text-main); }
+    .layer-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 15px; }
+    .layer-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--bg-dark); border-radius: 6px; border: 1px solid var(--border); transition: all 0.2s; }
+    .layer-item:hover { border-color: var(--primary-light); }
+    .layer-info { display: flex; align-items: center; gap: 10px; flex: 1; }
+    .layer-icon { width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; }
+    .layer-name { font-size: 0.85rem; font-weight: 500; }
+    .layer-status { font-size: 0.7rem; color: var(--text-muted); margin-left: auto; }
+    .toggle-switch { position: relative; width: 44px; height: 24px; cursor: pointer; }
+    .toggle-switch input { display: none; }
+    .toggle-slider { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--border); transition: 0.3s; border-radius: 24px; }
+    .toggle-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: 0.3s; border-radius: 50%; }
+    .toggle-switch input:checked + .toggle-slider { background-color: var(--primary-light); }
+    .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
+    .legend-panel { background: var(--bg-dark); padding: 12px; border-radius: 8px; border: 1px solid var(--border); }
+    .legend-panel h3 { font-size: 0.75rem; text-transform: uppercase; color: var(--primary-light); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+    .legend-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 0.8rem; border-bottom: 1px solid var(--border); }
+    .legend-item:last-child { border-bottom: none; }
+    .legend-color { width: 20px; height: 20px; border-radius: 4px; border: 1px solid var(--border); }
+    .legend-line { width: 20px; height: 3px; border-radius: 2px; }
+    .coord-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+    .coord-inputs > div { position: relative; }
+    .coord-inputs input { width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-main); border-radius: 5px; font-size: 0.85rem; transition: all 0.2s; }
+    .coord-inputs input:focus { outline: none; border-color: var(--primary-light); }
+    .coord-inputs label { font-size: 0.7rem; color: var(--text-muted); display: block; margin-bottom: 4px; font-weight: 500; }
+    .coord-system { display: flex; gap: 8px; margin-bottom: 12px; }
+    .coord-system label { flex: 1; padding: 9px; background: var(--bg-card); border: 2px solid var(--border); border-radius: 6px; cursor: pointer; text-align: center; font-size: 0.8rem; transition: all 0.2s; font-weight: 500; }
+    .coord-system input[type="radio"] { display: none; }
+    .coord-system label:hover { border-color: var(--primary-light); }
+    .coord-system label:has(input:checked) { background: var(--primary-light); color: white; border-color: var(--primary); box-shadow: 0 2px 8px rgba(59,130,246,0.3); }
+    .coord-system i { margin-right: 5px; }
+    .btn { padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.85rem; width: 100%; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.3px; }
+    .btn-primary { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%); color: white; box-shadow: 0 2px 8px rgba(30,64,175,0.3); }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(30,64,175,0.4); }
+    .btn-success { background: linear-gradient(135deg, var(--secondary) 0%, #34d399 100%); color: white; box-shadow: 0 2px 8px rgba(5,150,105,0.3); }
+    .btn-success:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(5,150,105,0.4); }
+    .btn-outline { background: transparent; border: 2px solid var(--border); color: var(--text-main); }
+    .btn-outline:hover { background: var(--border); border-color: var(--text-muted); }
+    .btn-warning { background: linear-gradient(135deg, var(--warning) 0%, #fbbf24 100%); color: white; }
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+    .kpi-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 15px 20px; background: var(--bg-card); border-bottom: 2px solid var(--border); }
+    .kpi-card { background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-card) 100%); padding: 15px; border-radius: 10px; border: 1px solid var(--border); border-left: 4px solid var(--primary-light); text-align: center; transition: transform 0.2s; }
+    .kpi-card:hover { transform: translateY(-2px); }
+    .kpi-card span { font-size: 1.6rem; font-weight: 700; color: var(--primary-light); display: block; text-shadow: 0 2px 4px rgba(59,130,246,0.2); }
+    .kpi-card small { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 5px; display: block; }
+    .split-view { display: flex; flex: 1; overflow: hidden; position: relative; }
+    .map-pane { flex: 1; position: relative; min-width: 300px; transition: flex 0.1s; }
+    #map { width: 100%; height: 100%; }
+    .resizer { width: 6px; background: var(--border); cursor: col-resize; transition: background 0.2s; z-index: 10; display: flex; align-items: center; justify-content: center; }
+    .resizer:hover, .resizer.active { background: var(--primary-light); }
+    .resizer::after { content: '⋮'; color: var(--text-muted); font-size: 12px; writing-mode: vertical-rl; }
+    .table-pane { flex: 0 0 400px; background: var(--bg-card); border-left: 1px solid var(--border); display: flex; flex-direction: column; min-width: 300px; max-width: 600px; transition: flex 0.1s; }
+    .table-header { padding: 15px 20px; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; font-weight: 600; border-bottom: 2px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .table-scroll { flex: 1; overflow-y: auto; }
+    #douars-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    #douars-table th { background: var(--bg-dark); position: sticky; top: 0; padding: 12px 15px; text-align: left; border-bottom: 2px solid var(--border); font-weight: 600; color: var(--primary-light); text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
+    #douars-table td { padding: 12px 15px; border-bottom: 1px solid var(--border); transition: background 0.15s; }
+    #douars-table tr { cursor: pointer; transition: all 0.15s; }
+    #douars-table tr:hover, #douars-table tr.active { background: rgba(59,130,246,0.1); }
+    #douars-table tr.active { border-left: 4px solid var(--accent); }
+    .coord-bar { position: absolute; bottom: 10px; left: 10px; right: 10px; background: rgba(15,23,42,0.95); backdrop-filter: blur(10px); border: 1px solid var(--border); border-radius: 8px; padding: 10px 15px; display: flex; gap: 20px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.4); font-size: 0.85rem; }
+    .coord-item { display: flex; align-items: center; gap: 8px; }
+    .coord-item i { color: var(--primary-light); }
+    .coord-item label { color: var(--text-muted); font-size: 0.75rem; }
+    .coord-item value { font-family: 'Courier New', monospace; font-weight: 600; color: var(--text-main); background: var(--bg-card); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border); }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.9); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 3000; opacity: 0; pointer-events: none; transition: all 0.3s; }
+    .modal-overlay.active { opacity: 1; pointer-events: auto; }
+    .modal { background: var(--bg-card); border: 2px solid var(--border); border-radius: 12px; padding: 30px; width: 90%; max-width: 950px; max-height: 90vh; overflow-y: auto; position: relative; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+    .modal-close { position: absolute; top: 15px; right: 15px; background: var(--bg-dark); border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 8px; transition: all 0.2s; }
+    .modal-close:hover { background: var(--danger); color: white; transform: rotate(90deg); }
+    .modal-header { margin-bottom: 25px; padding-bottom: 20px; border-bottom: 2px solid var(--border); }
+    .modal-title { font-size: 1.8rem; color: var(--primary-light); margin-bottom: 8px; font-weight: 700; }
+    .modal-subtitle { color: var(--text-muted); font-size: 0.95rem; }
+    .info-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 25px 0; }
+    .info-card { background: var(--bg-dark); padding: 15px; border-radius: 8px; border: 1px solid var(--border); border-left: 4px solid var(--primary-light); transition: transform 0.2s; }
+    .info-card:hover { transform: translateY(-2px); }
+    .info-card label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 8px; letter-spacing: 0.5px; }
+    .info-card value { font-size: 1.1rem; font-weight: 700; color: var(--text-main); display: block; }
+    .coord-table { width: 100%; border-collapse: collapse; margin: 25px 0; font-size: 0.85rem; border-radius: 8px; overflow: hidden; }
+    .coord-table th, .coord-table td { border: 1px solid var(--border); padding: 10px; text-align: center; }
+    .coord-table th { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); font-weight: 600; color: white; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.5px; }
+    .coord-table tr:nth-child(even) { background: rgba(30,41,59,0.5); }
+    .coord-table tr:hover { background: rgba(59,130,246,0.1); }
+    .coord-container { max-height: 350px; overflow-y: auto; border: 2px solid var(--border); border-radius: 8px; background: var(--bg-dark); }
+    .modal-actions { display: flex; gap: 12px; margin-top: 30px; padding-top: 25px; border-top: 2px solid var(--border); }
+    .modal-actions .btn { flex: 1; }
+    #loader { position: fixed; inset: 0; background: var(--bg-dark); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
+    .spinner { width: 60px; height: 60px; border: 4px solid var(--border); border-top-color: var(--primary-light); border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #pdf-template { position: absolute; left: -9999px; width: 1123px; background: white; padding: 50px; color: black; font-family: 'Times New Roman', serif; }
+    .pdf-header { text-align: center; border-bottom: 4px solid var(--primary); padding-bottom: 25px; margin-bottom: 30px; }
+    .pdf-header h2 { color: var(--primary); margin: 15px 0; font-size: 28px; }
+    .pdf-header .arabic { font-family: 'Traditional Arabic', Arial; font-size: 24px; margin: 8px 0; color: var(--primary-dark); }
+    .pdf-content { display: flex; gap: 30px; }
+    .pdf-map { flex: 2; border: 3px solid var(--border); height: 650px; background: #f8fafc; }
+    .pdf-info { flex: 1; font-size: 12px; }
+    .pdf-info-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    .pdf-info-table td { padding: 8px; border-bottom: 1px solid #cbd5e1; }
+    .pdf-info-table td:first-child { font-weight: bold; width: 40%; color: var(--primary-dark); }
+    .pdf-coords-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    .pdf-coords-table th, .pdf-coords-table td { border: 1px solid #334155; padding: 6px; text-align: center; }
+    .pdf-coords-table th { background: var(--primary); color: white; }
+    .pdf-footer { margin-top: 30px; display: flex; justify-content: space-between; font-size: 11px; border-top: 3px solid var(--primary); padding-top: 20px; }
+    
+    /* Styles pour la localisation de parcelle */
+    .parcelle-section { background: var(--bg-dark); padding: 15px; border-radius: 8px; border: 1px solid var(--border); border-left: 4px solid var(--warning); margin-bottom: 12px; }
+    .parcelle-section h3 { color: var(--warning); }
+    .parcelle-coords { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 10px 0; }
+    .parcelle-coords input { padding: 8px; background: var(--bg-card); border: 1px solid var(--border); color: var(--text-main); border-radius: 5px; font-size: 0.85rem; }
+    .parcelle-coords input:focus { outline: none; border-color: var(--warning); }
+    .points-list { max-height: 200px; overflow-y: auto; margin: 15px 0; border: 1px solid var(--border); border-radius: 6px; }
+    .point-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-card); margin: 5px 0; border-radius: 4px; font-size: 0.8rem; border-left: 3px solid var(--warning); }
+    .point-item .remove-point { background: var(--danger); color: white; border: none; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; }
+    .point-item .remove-point:hover { background: #dc2626; }
+    .parcelle-result { padding: 15px; border-radius: 8px; margin: 15px 0; font-weight: 600; text-align: center; display: none; }
+    .parcelle-result.inside { background: rgba(16,185,129,0.2); border: 2px solid var(--success); color: var(--success); display: block; }
+    .parcelle-result.outside { background: rgba(239,68,68,0.2); border: 2px solid var(--danger); color: var(--danger); display: block; }
+    .alert { padding: 12px 15px; border-radius: 6px; margin: 10px 0; display: flex; align-items: center; gap: 10px; font-size: 0.9rem; }
+    .alert-error { background: rgba(239,68,68,0.2); border: 1px solid var(--danger); color: var(--danger); }
+    .alert-success { background: rgba(16,185,129,0.2); border: 1px solid var(--success); color: var(--success); }
+    .alert-warning { background: rgba(245,158,11,0.2); border: 1px solid var(--warning); color: var(--warning); }
+    
+    @media (max-width: 1200px) { .sidebar { width: var(--sidebar-min); } .table-pane { flex: 0 0 350px; } }
+    @media (max-width: 992px) { .kpi-strip { grid-template-columns: repeat(2, 1fr); } .info-grid { grid-template-columns: repeat(2, 1fr); } .split-view { flex-direction: column; } .table-pane { flex: 0 0 40vh; border-left: none; border-top: 2px solid var(--border); max-width: 100%; } .resizer { display: none; } .coord-bar { flex-wrap: wrap; gap: 10px; font-size: 0.75rem; } .basemap-selector { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 768px) { .menu-toggle { display: block; } .sidebar { position: fixed; left: 0; top: var(--header-height); height: calc(100vh - var(--header-height)); transform: translateX(-100%); z-index: 999; box-shadow: 5px 0 15px rgba(0,0,0,0.5); } .sidebar.open { transform: translateX(0); } .kpi-strip { grid-template-columns: repeat(2, 1fr); padding: 10px; gap: 8px; } .kpi-card span { font-size: 1.3rem; } .kpi-card small { font-size: 0.65rem; } .coord-inputs { grid-template-columns: 1fr; } .modal { padding: 20px; } .modal-title { font-size: 1.4rem; } .info-grid { grid-template-columns: 1fr; } .coord-bar { position: relative; bottom: auto; left: auto; right: auto; margin: 10px; } .basemap-selector { grid-template-columns: repeat(2, 1fr); } .parcelle-coords { grid-template-columns: 1fr; } }
+    @media (max-width: 480px) { .kpi-strip { grid-template-columns: 1fr; } .app-header h1 { font-size: 1rem; } .app-header .subtitle { display: none; } .search-section { padding: 12px; } .btn { font-size: 0.8rem; padding: 8px; } }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--bg-dark); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--primary-light); }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div style="display:flex; align-items:center;">
+      <button class="menu-toggle" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></button>
+      <h1><i class="fa-solid fa-map-location-dot"></i> Délimitation des Douars <span class="subtitle">| Royaume du Maroc</span></h1>
+    </div>
+    <div style="font-size:0.85rem; opacity:0.9;">
+      <i class="fa-solid fa-shield-halved"></i> Agence Urbaine d'El Jadida - Sidi Bennour
+    </div>
+  </header>
+
+  <div id="loader"><div class="spinner"></div><div style="color:var(--text-muted);">Chargement des données...</div></div>
+
+  <div class="dashboard">
+    <aside class="sidebar" id="sidebar">
+      <div class="search-section">
+        <h3><i class="fa-solid fa-layer-group"></i> Fond de carte</h3>
+        <div class="basemap-selector">
+          <label class="basemap-option"><input type="radio" name="basemap" value="osm" checked><div class="basemap-preview"><div class="basemap-thumb" style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);"></div><div class="basemap-label">OpenStreetMap</div></div></label>
+          <label class="basemap-option"><input type="radio" name="basemap" value="satellite"><div class="basemap-preview"><div class="basemap-thumb" style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%);"></div><div class="basemap-label">Satellite</div></div></label>
+          <label class="basemap-option"><input type="radio" name="basemap" value="hybrid"><div class="basemap-preview"><div class="basemap-thumb" style="background: linear-gradient(135deg, #064e3b 0%, #065f46 100%);"></div><div class="basemap-label">Hybride</div></div></label>
+          <label class="basemap-option"><input type="radio" name="basemap" value="topo"><div class="basemap-preview"><div class="basemap-thumb" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);"></div><div class="basemap-label">Topographique</div></div></label>
+          <label class="basemap-option"><input type="radio" name="basemap" value="dark"><div class="basemap-preview"><div class="basemap-thumb" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);"></div><div class="basemap-label">Sombre</div></div></label>
+          <label class="basemap-option"><input type="radio" name="basemap" value="terrain"><div class="basemap-preview"><div class="basemap-thumb" style="background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);"></div><div class="basemap-label">Relief</div></div></label>
+        </div>
+      </div>
+      
+      <div class="search-section">
+        <h3><i class="fa-solid fa-map"></i> Couches thématiques</h3>
+        <div class="layer-list" id="layer-list"></div>
+      </div>
+      
+      <div class="legend-panel" id="legend-panel" style="display:none;"><h3><i class="fa-solid fa-book"></i> Légende</h3><div id="legend-content"></div></div>
+      
+      <div class="search-section">
+        <h3><i class="fa-solid fa-magnifying-glass"></i> Recherche textuelle</h3>
+        <div class="search-box"><i class="fa-solid fa-search"></i><input type="text" id="search-input" placeholder="Nom, code, commune, province..."></div>
+      </div>
+      
+      <div class="search-section">
+        <h3><i class="fa-solid fa-location-crosshairs"></i> Recherche par coordonnées</h3>
+        <div class="coord-system">
+          <label><input type="radio" name="coord-system" value="lambert" checked><span><i class="fa-solid fa-grip-lines"></i>Lambert Nord 1</span></label>
+          <label><input type="radio" name="coord-system" value="wgs84"><span><i class="fa-solid fa-globe"></i>GPS (WGS84)</span></label>
+        </div>
+        <div class="coord-inputs">
+          <div><label id="label-x">X (mètres)</label><input type="number" id="coord-x" step="0.01" placeholder="181301.52"></div>
+          <div><label id="label-y">Y (mètres)</label><input type="number" id="coord-y" step="0.01" placeholder="212550.12"></div>
+        </div>
+        <button class="btn btn-primary" onclick="searchByCoords()"><i class="fa-solid fa-crosshairs"></i> Localiser</button>
+      </div>
+
+      <!-- Nouvelle section: Localiser une Parcelle -->
+      <div class="parcelle-section">
+        <h3><i class="fa-solid fa-draw-polygon"></i> Localiser une Parcelle</h3>
+        <div class="alert alert-warning" style="font-size:0.8rem; margin:10px 0;"><i class="fa-solid fa-info-circle"></i> Minimum 4 points requis. Choisissez Lambert ou WGS84.</div>
+        <div class="coord-system" style="margin-bottom:10px;">
+          <label style="padding:6px;"><input type="radio" name="parcelle-coord-system" value="lambert" checked><span style="font-size:0.75rem;">Lambert</span></label>
+          <label style="padding:6px;"><input type="radio" name="parcelle-coord-system" value="wgs84"><span style="font-size:0.75rem;">WGS84</span></label>
+        </div>
+        <div class="parcelle-coords">
+          <div class="coord-inputs"><label style="font-size:0.7rem;">Coord 1 - X/Lon</label><input type="number" id="p1-x" step="0.000001" placeholder="181301.52"></div>
+          <div class="coord-inputs"><label style="font-size:0.7rem;">Coord 1 - Y/Lat</label><input type="number" id="p1-y" step="0.000001" placeholder="212550.12"></div>
+          <div class="coord-inputs"><label style="font-size:0.7rem;">Coord 2 - X/Lon</label><input type="number" id="p2-x" step="0.000001" placeholder=""></div>
+          <div class="coord-inputs"><label style="font-size:0.7rem;">Coord 2 - Y/Lat</label><input type="number" id="p2-y" step="0.000001" placeholder=""></div>
+          <div class="coord-inputs"><label style="font-size:0.7rem;">Coord 3 - X/Lon</label><input type="number" id="p3-x" step="0.000001" placeholder=""></div>
+          <div class="coord-inputs"><label style="font-size:0.7rem;">Coord 3 - Y/Lat</label><input type="number" id="p3-y" step="0.000001" placeholder=""></div>
+          <div class="coord-inputs"><label style="font-size:0.7rem;">Coord 4 - X/Lon</label><input type="number" id="p4-x" step="0.000001" placeholder=""></div>
+          <div class="coord-inputs"><label style="font-size:0.7rem;">Coord 4 - Y/Lat</label><input type="number" id="p4-y" step="0.000001" placeholder=""></div>
+        </div>
+        <button class="btn btn-warning" onclick="addParcellePoints()"><i class="fa-solid fa-plus"></i> Ajouter les points</button>
+        <button class="btn btn-outline" onclick="clearParcellePoints()" style="margin-top:5px;"><i class="fa-solid fa-trash"></i> Effacer</button>
+        <div class="points-list" id="parcelle-points-list"></div>
+        <button class="btn btn-primary" onclick="checkParcelle()" id="btn-check-parcelle" disabled><i class="fa-solid fa-check-double"></i> Vérifier la parcelle</button>
+        <div id="parcelle-result" class="parcelle-result"></div>
+        <button class="btn btn-success" onclick="exportParcellePDF()" id="btn-export-parcelle" style="display:none; margin-top:10px;"><i class="fa-solid fa-file-pdf"></i> Exporter PDF</button>
+      </div>
+      
+      <button class="btn btn-outline" onclick="resetView()"><i class="fa-solid fa-rotate-left"></i> Réinitialiser</button>
+    </aside>
+
+    <main class="main">
+      <div class="kpi-strip">
+        <div class="kpi-card"><span id="kpi-total">0</span><small>Total Douars</small></div>
+        <div class="kpi-card"><span id="kpi-area">0</span><small>Surface (ha)</small></div>
+        <div class="kpi-card"><span id="kpi-communes">0</span><small>Communes</small></div>
+        <div class="kpi-card"><span id="kpi-avg">0</span><small>Moyenne (ha)</small></div>
+      </div>
+      <div class="split-view">
+        <div class="map-pane" id="map-pane">
+          <div id="map"></div>
+          <div class="coord-bar" id="coord-bar">
+            <div class="coord-item"><i class="fa-solid fa-grip-lines"></i><div><label>Lambert Nord 1</label><br><value id="coord-lambert-x">X: ---</value> <value id="coord-lambert-y">Y: ---</value></div></div>
+            <div class="coord-item"><i class="fa-solid fa-globe"></i><div><label>WGS84 (GPS)</label><br><value id="coord-wgs-lat">Lat: ---</value> <value id="coord-wgs-lon">Lon: ---</value></div></div>
+          </div>
+        </div>
+        <div class="resizer" id="resizer"></div>
+        <div class="table-pane">
+          <div class="table-header"><span><i class="fa-solid fa-table"></i> Table des Douars</span><span id="table-count" style="font-size:0.85rem; opacity:0.9">0 résultats</span></div>
+          <div class="table-scroll"><table id="douars-table"><thead><tr><th>Nom</th><th>Code</th><th>Commune</th><th>Province</th><th>Surface</th></tr></thead><tbody></tbody></table></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal Détails Douar -->
+  <div class="modal-overlay" id="modal-details">
+    <div class="modal">
+      <button class="modal-close" onclick="closeModal('modal-details')">&times;</button>
+      <div class="modal-header"><div class="modal-title" id="modal-title">Douar</div><div class="modal-subtitle" id="modal-subtitle">Fiche technique détaillée</div></div>
+      <div class="info-grid" id="modal-info">
+        <div class="info-card"><label>Code</label><value id="info-code">-</value></div>
+        <div class="info-card"><label>Commune</label><value id="info-commune">-</value></div>
+        <div class="info-card"><label>Cercle</label><value id="info-cercle">-</value></div>
+        <div class="info-card"><label>Province</label><value id="info-province">-</value></div>
+        <div class="info-card"><label>Surface</label><value id="info-surface">- ha</value></div>
+        <div class="info-card"><label>Sommets</label><value id="info-vertices">-</value></div>
+      </div>
+      <h3 style="margin:30px 0 15px; color:var(--primary-light); font-size:1.2rem; display:flex; align-items:center; gap:10px;"><i class="fa-solid fa-list-ol"></i> Coordonnées des sommets</h3>
+      <div class="coord-container"><table class="coord-table" id="modal-coords"><thead><tr><th>Point</th><th>X (Lambert)</th><th>Y (Lambert)</th><th>Latitude</th><th>Longitude</th></tr></thead><tbody></tbody></table></div>
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="zoomToFeature()"><i class="fa-solid fa-magnifying-glass-plus"></i> Zoomer</button>
+        <button class="btn btn-success" onclick="exportPDF()"><i class="fa-solid fa-file-pdf"></i> Exporter PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Template PDF -->
+  <div id="pdf-template">
+    <div class="pdf-header"><div class="arabic">المملكة المغربية</div><div style="font-weight:bold; font-size:18px;">Royaume du Maroc</div><h2>FICHE TECHNIQUE - DÉLIMITATION</h2><div style="margin-top:12px; font-size:14px; color:#64748b;">Agence Urbaine d'El Jadida - Sidi Bennour</div></div>
+    <div class="pdf-content">
+      <div class="pdf-map" id="pdf-map-container"></div>
+      <div class="pdf-info">
+        <table class="pdf-info-table">
+          <tr><td>Nom du Douar:</td><td id="pdf-name">-</td></tr>
+          <tr><td>Code:</td><td id="pdf-code">-</td></tr>
+          <tr><td>Commune:</td><td id="pdf-commune">-</td></tr>
+          <tr><td>Cercle:</td><td id="pdf-cercle">-</td></tr>
+          <tr><td>Province:</td><td id="pdf-province">-</td></tr>
+          <tr><td>Surface:</td><td id="pdf-surface">- ha</td></tr>
+          <tr><td>Projection:</td><td>Merchich Maroc Nord 1</td></tr>
+          <tr><td>EPSG:</td><td>26191</td></tr>
+        </table>
+        <h3 style="margin:20px 0 12px; background:var(--primary); color:white; padding:8px; text-align:center; border-radius:4px;">COORDONNÉES LAMBERT</h3>
+        <table class="pdf-coords-table" id="pdf-coords-table"><thead><tr><th>Point</th><th>X (m)</th><th>Y (m)</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+    <div class="pdf-footer"><span>Date d'édition: <span id="pdf-date"></span></span><span>Page 1/1</span></div>
+  </div>
+
+  <!-- Template PDF Parcelle -->
+  <div id="pdf-parcelle-template" style="position:absolute; left:-9999px; width:1123px; background:white; padding:50px; color:black; font-family:'Times New Roman',serif;">
+    <div class="pdf-header"><div class="arabic">المملكة المغربية</div><div style="font-weight:bold; font-size:18px;">Royaume du Maroc</div><h2>VÉRIFICATION DE PARCELLE</h2><div style="margin-top:12px; font-size:14px; color:#64748b;">Agence Urbaine d'El Jadida - Sidi Bennour</div></div>
+    <div class="pdf-content">
+      <div class="pdf-map" id="pdf-parcelle-map"></div>
+      <div class="pdf-info">
+        <div id="pdf-parcelle-result" class="pdf-result" style="padding:15px; border-radius:6px; margin:15px 0; text-align:center; font-weight:bold; font-size:16px;"></div>
+        <table style="width:100%; border-collapse:collapse; margin:15px 0;">
+          <tr><td style="padding:8px; border-bottom:1px solid #cbd5e1;"><strong>Date:</strong></td><td id="pdf-parcelle-date" style="padding:8px; border-bottom:1px solid #cbd5e1;">-</td></tr>
+          <tr><td style="padding:8px; border-bottom:1px solid #cbd5e1;"><strong>Nombre de points:</strong></td><td id="pdf-parcelle-nb" style="padding:8px; border-bottom:1px solid #cbd5e1;">-</td></tr>
+          <tr><td style="padding:8px; border-bottom:1px solid #cbd5e1;"><strong>Projection:</strong></td><td style="padding:8px; border-bottom:1px solid #cbd5e1;">Merchich Maroc Nord 1 (EPSG:26191)</td></tr>
+        </table>
+        <h3 style="margin:15px 0; background:var(--primary); color:white; padding:8px; text-align:center;">Coordonnées des points</h3>
+        <table id="pdf-parcelle-points" style="width:100%; border-collapse:collapse; font-size:10px;"></table>
+      </div>
+    </div>
+    <div style="margin-top:30px; text-align:center; font-size:11px; border-top:2px solid var(--primary); padding-top:15px;">Document généré automatiquement</div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
+  <script>
+    proj4.defs('EPSG:26191', '+proj=lcc +lat_1=33.3 +lat_0=33.3 +lon_0=-5.4 +k_0=0.999625769 +x_0=500000 +y_0=300000 +a=6376896.84 +b=6355743.18 +towgs84=31,146,47,0,0,0,0 +units=m +no_defs');
+    proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+
+    const transformGeoJSON = (gj) => {
+      if (!gj) throw new Error("Données vides");
+      let features = [];
+      if (Array.isArray(gj)) features = gj;
+      else if (gj.type === "Feature" && gj.geometry) features = [gj];
+      else if (gj.type === "FeatureCollection" && Array.isArray(gj.features)) features = gj.features;
+      else throw new Error("Structure non reconnue");
+      const t = c => proj4('EPSG:26191', 'EPSG:4326', [c[0], c[1]]);
+      const transformGeom = (g) => {
+        if (!g?.coordinates) return g;
+        const c = JSON.parse(JSON.stringify(g));
+        if (c.type === 'Polygon') c.coordinates = c.coordinates.map(r => r.map(t));
+        else if (c.type === 'MultiPolygon') c.coordinates = c.coordinates.map(p => p.map(r => r.map(t)));
+        return c;
+      };
+      return { type: "FeatureCollection", features: features.map(f => ({ ...f, geometry: transformGeom(f.geometry) })) };
+    };
+
+    const map = L.map('map').setView([34.0, -5.5], 10);
+    const baseMaps = {
+      osm: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM', maxZoom: 19 }),
+      satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri', maxZoom: 19 }),
+      hybrid: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: '© Esri', maxZoom: 19 }),
+      topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { attribution: '© OpenTopoMap', maxZoom: 17 }),
+      dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© CARTO', maxZoom: 19 }),
+      terrain: L.tileLayer('https://{s}.tile.thunderforest.com/landscape/{z}/{x}/{y}.png?apikey=YOUR_API_KEY', { attribution: '© Thunderforest', maxZoom: 19 })
+    };
+    let currentBaseMap = baseMaps.osm; currentBaseMap.addTo(map);
+    document.querySelectorAll('input[name="basemap"]').forEach(radio => {
+      radio.addEventListener('change', (e) => { map.removeLayer(currentBaseMap); currentBaseMap = baseMaps[e.target.value]; map.addLayer(currentBaseMap); });
+    });
+
+    const overlayLayers = {};
+    const layerConfigs = [
+      { id: 'douars', name: 'Douars', icon: '📍', color: '#3b82f6', type: 'fill', file: 'Délimitation des Douars.geojson', enabled: true },
+      { id: 'communes', name: 'Communes', icon: '🏛️', color: '#1de05b', type: 'line', file: 'Commune.geojson', enabled: false },
+      { id: 'provinces', name: 'Provinces', icon: '🏛️', color: '#3d0773', type: 'line', file: 'Province.geojson', enabled: false }
+    ];
+    
+    let douarsLayer, originalFeatures = [], currentFeature = null, currentLayer = null;
+    let parcellePoints = [], parcelleLayer = null, parcelleResult = null;
+
+    function getAreaHA(feature) {
+      const p = feature.properties || {};
+      const propVal = p.surface || p.surface_ha || p.SURF_HA || p["SUP EN HA"] || p.SUP_EN_HA;
+      if (propVal && parseFloat(propVal) > 0) return parseFloat(propVal);
+      const coords = feature.geometry.type === 'Polygon' ? feature.geometry.coordinates[0] : feature.geometry.type === 'MultiPolygon' ? feature.geometry.coordinates[0][0] : [];
+      let area = 0;
+      for (let i = 0, j = coords.length - 1; i < coords.length; j = i++) area += (coords[j][0] * coords[i][1]) - (coords[i][0] * coords[j][1]);
+      return Math.abs(area) / 20000;
+    }
+
+    async function initLayers() {
+      const layerList = document.getElementById('layer-list'); layerList.innerHTML = '';
+      for (const config of layerConfigs) {
+        const layerItem = document.createElement('div'); layerItem.className = 'layer-item';
+        layerItem.innerHTML = `<div class="layer-info"><div class="layer-icon" style="background:${config.color}20; color:${config.color}">${config.icon}</div><div class="layer-name">${config.name}</div><div class="layer-status" id="status-${config.id}">⏳</div></div><label class="toggle-switch"><input type="checkbox" id="toggle-${config.id}" ${config.enabled ? 'checked' : ''}><span class="toggle-slider"></span></label>`;
+        layerList.appendChild(layerItem);
+        try {
+          const res = await fetch(config.file);
+          if (res.ok) {
+            const data = transformGeoJSON(await res.json());
+            const layerStyle = config.type === 'fill' ? { color: config.color, weight: 2, fillColor: config.color, fillOpacity: 0.6 } : { color: config.color, weight: 3, dashArray: '5,5', fillColor: 'transparent', fillOpacity: 0.3 };
+            const layer = L.geoJSON(data, { style: layerStyle, onEachFeature: (f, l) => { if (config.id === 'douars') l.on('click', () => selectFeature(f, l)); else l.bindPopup(`<b>${config.name}</b><br>${f.properties.NOM || f.properties.name || f.properties.commune || 'N/A'}`); } });
+            overlayLayers[config.id] = layer;
+            if (config.enabled) { layer.addTo(map); if (config.id === 'douars') { douarsLayer = layer; originalFeatures = data.features; map.fitBounds(layer.getBounds(), { padding: [20, 20] }); updateDashboard(); } }
+            document.getElementById(`status-${config.id}`).textContent = '✅'; document.getElementById(`status-${config.id}`).style.color = 'var(--success)';
+          } else { document.getElementById(`status-${config.id}`).textContent = '❌'; document.getElementById(`status-${config.id}`).style.color = 'var(--danger)'; document.getElementById(`toggle-${config.id}`).disabled = true; }
+        } catch (err) { console.error(`Erreur ${config.name}:`, err); document.getElementById(`status-${config.id}`).textContent = '❌'; document.getElementById(`status-${config.id}`).style.color = 'var(--danger)'; document.getElementById(`toggle-${config.id}`).disabled = true; }
+        document.getElementById(`toggle-${config.id}`).addEventListener('change', (e) => { if (e.target.checked) { overlayLayers[config.id].addTo(map); if (config.id === 'douars') douarsLayer = overlayLayers[config.id]; } else map.removeLayer(overlayLayers[config.id]); updateLegend(); });
+      }
+      updateLegend(); document.getElementById('loader').style.display = 'none';
+    }
+
+    function updateLegend() {
+      const legendPanel = document.getElementById('legend-panel'), legendContent = document.getElementById('legend-content');
+      let hasActive = false, html = '';
+      for (const config of layerConfigs) {
+        if (document.getElementById(`toggle-${config.id}`).checked) {
+          hasActive = true;
+          if (config.type === 'fill') html += `<div class="legend-item"><div class="legend-color" style="background:${config.color}80; border-color:${config.color}"></div><span>${config.name}</span></div>`;
+          else html += `<div class="legend-item"><div class="legend-line" style="background:${config.color}; height:3px;"></div><span>${config.name}</span></div>`;
+        }
+      }
+      if (hasActive) { legendContent.innerHTML = html; legendPanel.style.display = 'block'; } else legendPanel.style.display = 'none';
+    }
+
+    map.on('mousemove', (e) => {
+      const lat = e.latlng.lat, lon = e.latlng.lng, lambert = proj4('EPSG:4326', 'EPSG:26191', [lon, lat]);
+      document.getElementById('coord-lambert-x').textContent = `X: ${lambert[0].toFixed(2)}`;
+      document.getElementById('coord-lambert-y').textContent = `Y: ${lambert[1].toFixed(2)}`;
+      document.getElementById('coord-wgs-lat').textContent = `Lat: ${lat.toFixed(6)}`;
+      document.getElementById('coord-wgs-lon').textContent = `Lon: ${lon.toFixed(6)}`;
+    });
+
+    document.querySelectorAll('input[name="coord-system"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        if (e.target.value === 'lambert') { document.getElementById('label-x').textContent = 'X (mètres)'; document.getElementById('label-y').textContent = 'Y (mètres)'; document.getElementById('coord-x').placeholder = '181301.52'; document.getElementById('coord-y').placeholder = '212550.12'; }
+        else { document.getElementById('label-x').textContent = 'Longitude'; document.getElementById('label-y').textContent = 'Latitude'; document.getElementById('coord-x').placeholder = '-5.4'; document.getElementById('coord-y').placeholder = '34.0'; }
+      });
+    });
+
+    function updateDashboard() {
+      document.getElementById('kpi-total').textContent = originalFeatures.length;
+      const total = originalFeatures.reduce((a, f) => a + getAreaHA(f), 0);
+      document.getElementById('kpi-area').textContent = Math.round(total).toLocaleString('fr-FR');
+      const communes = new Set(originalFeatures.map(f => f.properties?.COMMUNE || '-'));
+      document.getElementById('kpi-communes').textContent = communes.size;
+      document.getElementById('kpi-avg').textContent = originalFeatures.length ? Math.round(total / originalFeatures.length).toLocaleString('fr-FR') : 0;
+      buildTable(originalFeatures);
+    }
+
+    function buildTable(features) {
+      const tbody = document.querySelector('#douars-table tbody');
+      document.getElementById('table-count').textContent = `${features.length} résultat${features.length > 1 ? 's' : ''}`;
+      tbody.innerHTML = features.map(f => { const p = f.properties || {}; return `<tr><td><strong>${p.DOUAR || '-'}</strong></td><td>${p.CODE || '-'}</td><td>${p.COMMUNE || '-'}</td><td>${p.PROVINCE || '-'}</td><td>${getAreaHA(f).toFixed(2)}</td></tr>`; }).join('');
+      tbody.querySelectorAll('tr').forEach((row, idx) => row.addEventListener('click', () => selectFeatureByRow(row, features[idx])));
+    }
+
+    function selectFeature(f, l) {
+      if (currentLayer) currentLayer.setStyle({ color: '#3b82f6', fillColor: '#93c5fd', fillOpacity: 0.6, weight: 2 });
+      currentFeature = f; currentLayer = l;
+      l.setStyle({ color: '#f59e0b', fillColor: '#fde68a', fillOpacity: 0.8, weight: 4 });
+      map.fitBounds(l.getBounds(), { padding: [30, 30] });
+      openModal(f);
+      document.querySelectorAll('#douars-table tr').forEach(r => r.classList.remove('active'));
+    }
+
+    function selectFeatureByRow(row, feature) {
+      document.querySelectorAll('#douars-table tr').forEach(r => r.classList.remove('active')); row.classList.add('active');
+      douarsLayer.eachLayer(l => { if (l.feature === feature) selectFeature(feature, l); });
+    }
+
+    function openModal(f) {
+      const p = f.properties || {};
+      document.getElementById('modal-title').textContent = p.DOUAR || 'Douar';
+      document.getElementById('modal-subtitle').textContent = `Code: ${p.CODE || 'N/A'} | ${p.COMMUNE || 'N/A'}`;
+      document.getElementById('info-code').textContent = p.CODE || '-';
+      document.getElementById('info-commune').textContent = p.COMMUNE || '-';
+      document.getElementById('info-cercle').textContent = p.CERCLE || '-';
+      document.getElementById('info-province').textContent = p.PROVINCE || '-';
+      document.getElementById('info-surface').textContent = `${getAreaHA(f).toFixed(2)} ha`;
+      const coords = f.geometry.type === 'Polygon' ? f.geometry.coordinates[0] : f.geometry.coordinates[0][0];
+      document.getElementById('info-vertices').textContent = coords.length;
+      document.querySelector('#modal-coords tbody').innerHTML = coords.map((c, i) => { const lambert = proj4('EPSG:4326', 'EPSG:26191', c); return `<tr><td><strong>B${i+1}</strong></td><td>${lambert[0].toFixed(3)}</td><td>${lambert[1].toFixed(3)}</td><td>${c[1].toFixed(6)}</td><td>${c[0].toFixed(6)}</td></tr>`; }).join('');
+      document.getElementById('modal-details').classList.add('active');
+    }
+
+    function closeModal(id) { document.getElementById(id).classList.remove('active'); if (id === 'modal-details') { if (currentLayer) currentLayer.setStyle({ color: '#3b82f6', fillColor: '#93c5fd', fillOpacity: 0.6, weight: 2 }); currentFeature = null; currentLayer = null; document.querySelectorAll('#douars-table tr.active').forEach(r => r.classList.remove('active')); } }
+
+    function zoomToFeature() { if (currentLayer) map.fitBounds(currentLayer.getBounds(), { padding: [50, 50] }); }
+
+    function searchByCoords() {
+      const x = parseFloat(document.getElementById('coord-x').value), y = parseFloat(document.getElementById('coord-y').value), system = document.querySelector('input[name="coord-system"]:checked').value;
+      if (isNaN(x) || isNaN(y)) { alert('Coordonnées invalides'); return; }
+      let lat, lon;
+      if (system === 'lambert') { const wgs = proj4('EPSG:26191', 'EPSG:4326', [x, y]); lon = wgs[0]; lat = wgs[1]; } else { lon = x; lat = y; }
+      map.setView([lat, lon], 16);
+      map.eachLayer(layer => { if (layer instanceof L.Marker && !layer._popup) layer.remove(); });
+      L.marker([lat, lon]).addTo(map).bindPopup(`<b>Position</b><br>Lambert: ${x.toFixed(2)}, ${y.toFixed(2)}<br>WGS84: ${lat.toFixed(6)}, ${lon.toFixed(6)}`).openPopup();
+    }
+
+    document.getElementById('search-input').addEventListener('input', (e) => {
+      const t = e.target.value.toLowerCase();
+      buildTable(t ? originalFeatures.filter(f => Object.values(f.properties || {}).some(v => v && String(v).toLowerCase().includes(t))) : originalFeatures);
+    });
+
+    async function exportPDF() {
+      if (!currentFeature) return;
+      const p = currentFeature.properties || {}, nom = p.DOUAR || 'Douar';
+      document.getElementById('pdf-name').textContent = nom; document.getElementById('pdf-code').textContent = p.CODE || '-';
+      document.getElementById('pdf-commune').textContent = p.COMMUNE || '-'; document.getElementById('pdf-cercle').textContent = p.CERCLE || '-';
+      document.getElementById('pdf-province').textContent = p.PROVINCE || '-'; document.getElementById('pdf-surface').textContent = `${getAreaHA(currentFeature).toFixed(2)} ha`;
+      document.getElementById('pdf-date').textContent = new Date().toLocaleDateString('fr-FR');
+      const coords = currentFeature.geometry.type === 'Polygon' ? currentFeature.geometry.coordinates[0] : currentFeature.geometry.coordinates[0][0];
+      document.querySelector('#pdf-coords-table tbody').innerHTML = coords.map((c, i) => { const lambert = proj4('EPSG:4326', 'EPSG:26191', c); return `<tr><td><strong>B${i+1}</strong></td><td>${lambert[0].toFixed(2)}</td><td>${lambert[1].toFixed(2)}</td></tr>`; }).join('');
+      const mapContainer = document.getElementById('pdf-map-container'); mapContainer.innerHTML = '';
+      const tempMap = L.map(mapContainer, { zoomControl: false, attributionControl: false }).setView(map.getCenter(), map.getZoom());
+      currentBaseMap.addTo(tempMap); L.geoJSON(currentFeature, { style: { color: '#1e40af', weight: 3, fillColor: '#93c5fd', fillOpacity: 0.7 } }).addTo(tempMap);
+      await new Promise(r => setTimeout(r, 800)); tempMap.fitBounds(currentLayer.getBounds(), { padding: [40, 40] }); await new Promise(r => setTimeout(r, 300));
+      const { jsPDF } = window.jspdf; const canvas = await html2canvas(document.getElementById('pdf-template'), { useCORS: true, scale: 2, logging: false });
+      const pdf = new jsPDF('l', 'mm', 'a4'); pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 297, 210);
+      pdf.save(`Fiche_${nom.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`); setTimeout(() => tempMap.remove(), 100);
+    }
+
+    function resetView() {
+      document.getElementById('search-input').value = ''; document.getElementById('coord-x').value = ''; document.getElementById('coord-y').value = '';
+      clearParcellePoints(); buildTable(originalFeatures); if (douarsLayer) map.fitBounds(douarsLayer.getBounds(), { padding: [20, 20] });
+      map.eachLayer(layer => { if (layer instanceof L.Marker) layer.remove(); });
+    }
+
+    function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+
+    const resizer = document.getElementById('resizer'), mapPane = document.getElementById('map-pane'), tablePane = document.querySelector('.table-pane');
+    let isResizing = false;
+    resizer.addEventListener('mousedown', (e) => { isResizing = true; resizer.classList.add('active'); document.body.style.cursor = 'col-resize'; document.body.style.userSelect = 'none'; });
+    document.addEventListener('mousemove', (e) => { if (!isResizing) return; const containerWidth = document.querySelector('.split-view').offsetWidth; const newTableWidth = Math.max(300, Math.min(containerWidth - e.clientX, 600)); const newMapWidth = containerWidth - newTableWidth - 6; tablePane.style.flex = `0 0 ${newTableWidth}px`; mapPane.style.flex = `0 0 ${newMapWidth}px`; });
+    document.addEventListener('mouseup', () => { isResizing = false; resizer.classList.remove('active'); document.body.style.cursor = 'default'; document.body.style.userSelect = 'auto'; });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModal('modal-details'); } });
+
+    // ===== FONCTIONNALITÉS PARCELLE =====
+    
+    function addParcellePoints() {
+      const system = document.querySelector('input[name="parcelle-coord-system"]:checked').value;
+      const inputs = ['p1-x','p1-y','p2-x','p2-y','p3-x','p3-y','p4-x','p4-y'];
+      const values = inputs.map(id => document.getElementById(id).value.trim());
+      
+      if (values.filter(v => v !== '').length < 8) {
+        document.getElementById('parcelle-result').className = 'parcelle-result outside';
+        document.getElementById('parcelle-result').innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> Veuillez remplir les 8 champs (4 points × 2 coordonnées)';
+        document.getElementById('parcelle-result').style.display = 'block';
+        return;
+      }
+      
+      parcellePoints = [];
+      for (let i = 0; i < 4; i++) {
+        const x = parseFloat(document.getElementById(`p${i+1}-x`).value);
+        const y = parseFloat(document.getElementById(`p${i+1}-y`).value);
+        if (isNaN(x) || isNaN(y)) continue;
+        
+        let lat, lon;
+        if (system === 'lambert') {
+          const wgs = proj4('EPSG:26191', 'EPSG:4326', [x, y]);
+          lon = wgs[0]; lat = wgs[1];
+        } else { lon = x; lat = y; }
+        
+        parcellePoints.push(L.latLng(lat, lon));
+      }
+      
+      if (parcellePoints.length < 4) {
+        document.getElementById('parcelle-result').className = 'parcelle-result outside';
+        document.getElementById('parcelle-result').innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> Seulement ${parcellePoints.length}/4 points valides`;
+        document.getElementById('parcelle-result').style.display = 'block';
+        return;
+      }
+      
+      updateParcelleDisplay();
+      document.getElementById('btn-check-parcelle').disabled = false;
+      document.getElementById('parcelle-result').style.display = 'none';
+      document.getElementById('btn-export-parcelle').style.display = 'none';
+      parcelleResult = null;
+    }
+    
+    function updateParcelleDisplay() {
+      if (parcelleLayer) map.removeLayer(parcelleLayer);
+      parcelleLayer = L.polygon(parcellePoints, { color: '#f59e0b', weight: 3, fillColor: '#fde68a', fillOpacity: 0.6 }).addTo(map);
+      
+      const list = document.getElementById('parcelle-points-list');
+      list.innerHTML = parcellePoints.map((p, i) => {
+        const lambert = proj4('EPSG:4326', 'EPSG:26191', [p.lng, p.lat]);
+        return `<div class="point-item"><span><strong>B${i+1}</strong>: ${lambert[0].toFixed(2)}, ${lambert[1].toFixed(2)}</span><button class="remove-point" onclick="removeParcellePoint(${i})">×</button></div>`;
+      }).join('');
+      
+      map.fitBounds(parcelleLayer.getBounds(), { padding: [50, 50] });
+    }
+    
+    function removeParcellePoint(index) {
+      parcellePoints.splice(index, 1);
+      if (parcellePoints.length < 4) {
+        document.getElementById('btn-check-parcelle').disabled = true;
+        document.getElementById('parcelle-result').style.display = 'none';
+      }
+      if (parcellePoints.length > 0) updateParcelleDisplay();
+      else { if (parcelleLayer) map.removeLayer(parcelleLayer); document.getElementById('parcelle-points-list').innerHTML = ''; }
+    }
+    
+    function clearParcellePoints() {
+      parcellePoints = [];
+      if (parcelleLayer) map.removeLayer(parcelleLayer);
+      ['p1-x','p1-y','p2-x','p2-y','p3-x','p3-y','p4-x','p4-y'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('parcelle-points-list').innerHTML = '';
+      document.getElementById('btn-check-parcelle').disabled = true;
+      document.getElementById('parcelle-result').style.display = 'none';
+      document.getElementById('btn-export-parcelle').style.display = 'none';
+      parcelleResult = null;
+    }
+    
+    function checkParcelle() {
+      if (parcellePoints.length < 4) {
+        document.getElementById('parcelle-result').className = 'parcelle-result outside';
+        document.getElementById('parcelle-result').innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> Minimum 4 points requis';
+        document.getElementById('parcelle-result').style.display = 'block';
+        return;
+      }
+      
+      let foundDouar = null;
+      const parcelleBounds = L.polygon(parcellePoints).getBounds();
+      
+      for (const feature of originalFeatures) {
+        const coords = feature.geometry.type === 'Polygon' ? feature.geometry.coordinates[0] : feature.geometry.coordinates[0][0];
+        const douarLatLngs = coords.map(c => { const wgs = proj4('EPSG:26191', 'EPSG:4326', c); return L.latLng(wgs[1], wgs[0]); });
+        const douarPolygon = L.polygon(douarLatLngs);
+        
+        if (parcelleBounds.intersects(douarPolygon.getBounds())) {
+          const allInside = parcellePoints.every(point => douarPolygon.contains(point));
+          if (allInside) { foundDouar = feature; break; }
+        }
+      }
+      
+      const resultDiv = document.getElementById('parcelle-result');
+      if (foundDouar) {
+        const p = foundDouar.properties || {};
+        parcelleResult = { found: true, douar: p.DOUAR || 'N/A', code: p.CODE || 'N/A', commune: p.COMMUNE || 'N/A', province: p.PROVINCE || 'N/A' };
+        resultDiv.className = 'parcelle-result inside';
+        resultDiv.innerHTML = `<i class="fa-solid fa-check-circle"></i> ✓ Parcelle située dans: <strong>${parcelleResult.douar}</strong><br><small>Code: ${parcelleResult.code} | Commune: ${parcelleResult.commune}</small>`;
+      } else {
+        parcelleResult = { found: false };
+        resultDiv.className = 'parcelle-result outside';
+        resultDiv.innerHTML = '<i class="fa-solid fa-times-circle"></i> ✗ La parcelle ne se trouve dans aucun douar délimité';
+      }
+      resultDiv.style.display = 'block';
+      document.getElementById('btn-export-parcelle').style.display = 'inline-flex';
+    }
+    
+    async function exportParcellePDF() {
+      if (!parcelleResult || parcellePoints.length < 4) return;
+      
+      document.getElementById('pdf-parcelle-date').textContent = new Date().toLocaleDateString('fr-FR');
+      document.getElementById('pdf-parcelle-nb').textContent = parcellePoints.length;
+      
+      const resultDiv = document.getElementById('pdf-parcelle-result');
+      if (parcelleResult.found) {
+        resultDiv.className = 'pdf-result inside';
+        resultDiv.innerHTML = `✓ Parcelle située dans: ${parcelleResult.douar}`;
+      } else {
+        resultDiv.className = 'pdf-result outside';
+        resultDiv.innerHTML = '✗ Parcelle hors douar';
+      }
+      
+      const pointsTable = document.getElementById('pdf-parcelle-points');
+      pointsTable.innerHTML = '<thead><tr style="background:#1e40af; color:white;"><th style="padding:6px;">Point</th><th style="padding:6px;">X (Lambert)</th><th style="padding:6px;">Y (Lambert)</th><th style="padding:6px;">Lat</th><th style="padding:6px;">Lon</th></tr></thead><tbody>' +
+        parcellePoints.map((p, i) => {
+          const lambert = proj4('EPSG:4326', 'EPSG:26191', [p.lng, p.lat]);
+          return `<tr><td style="padding:6px; border:1px solid #334155;"><strong>B${i+1}</strong></td><td style="padding:6px; border:1px solid #334155;">${lambert[0].toFixed(2)}</td><td style="padding:6px; border:1px solid #334155;">${lambert[1].toFixed(2)}</td><td style="padding:6px; border:1px solid #334155;">${p.lat.toFixed(6)}</td><td style="padding:6px; border:1px solid #334155;">${p.lng.toFixed(6)}</td></tr>`;
+        }).join('') + '</tbody>';
+      
+      const mapContainer = document.getElementById('pdf-parcelle-map');
+      mapContainer.innerHTML = '';
+      const tempMap = L.map(mapContainer, { zoomControl: false, attributionControl: false }).setView(map.getCenter(), map.getZoom());
+      currentBaseMap.addTo(tempMap);
+      L.polygon(parcellePoints, { color: '#f59e0b', weight: 3, fillColor: '#fde68a', fillOpacity: 0.6 }).addTo(tempMap);
+      tempMap.fitBounds(L.polygon(parcellePoints).getBounds(), { padding: [40, 40] });
+      
+      await new Promise(r => setTimeout(r, 800));
+      const { jsPDF } = window.jspdf;
+      const canvas = await html2canvas(document.getElementById('pdf-parcelle-template'), { useCORS: true, scale: 2, logging: false });
+      const pdf = new jsPDF('l', 'mm', 'a4');
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, 297, 210);
+      pdf.save(`Parcelle_${new Date().toISOString().slice(0,10)}.pdf`);
+      setTimeout(() => tempMap.remove(), 100);
+    }
+    
+    initLayers();
+  </script>
+</body>
+</html>

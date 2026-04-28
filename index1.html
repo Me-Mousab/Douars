@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Délimitation des Douars</title>
+  
+  <!-- Leaflet & Plugins CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --bg-card: #1e293b;
+      --text-main: #e2e8f0;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --border: #334155;
+      --sidebar-width: 320px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: var(--bg-dark); color: var(--text-main); height: 100vh; overflow: hidden; }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: var(--sidebar-width) 1fr;
+      height: 100vh;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      overflow-y: auto;
+    }
+    .logo { font-size: 1.4rem; font-weight: 700; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+    .search-box { position: relative; }
+    .search-box input {
+      width: 100%; padding: 10px 12px 10px 35px; background: #0f172a; border: 1px solid var(--border);
+      color: var(--text-main); border-radius: 8px; font-size: 0.9rem; transition: 0.2s;
+    }
+    .search-box input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,0.2); }
+    .search-box i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); }
+    
+    .legend-panel {
+      background: #0f172a; padding: 12px; border-radius: 8px; border: 1px solid var(--border);
+    }
+    .legend-panel h3 { font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; letter-spacing: 0.5px; }
+    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; margin-bottom: 6px; }
+    .legend-color { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border); }
+
+    .controls { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+    .btn {
+      padding: 10px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: 500;
+      transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
+    .btn-outline:hover { background: var(--border); }
+
+    /* Map Container */
+    .map-wrapper { position: relative; background: #0f172a; }
+    #map { width: 100%; height: 100%; border-radius: 0; }
+
+    /* Cartographic Overlays */
+    .map-title {
+      position: absolute; top: 15px; left: 15px; background: rgba(30,41,59,0.9);
+      padding: 8px 12px; border-radius: 6px; font-weight: 600; z-index: 1000; backdrop-filter: blur(4px);
+      border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .north-arrow {
+      position: absolute; bottom: 15px; right: 15px; width: 40px; z-index: 1000;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+    }
+    .coord-grid {
+      position: absolute; bottom: 15px; left: 15px; background: rgba(30,41,59,0.9);
+      padding: 6px 10px; border-radius: 4px; font-size: 0.75rem; z-index: 1000; color: var(--text-muted);
+    }
+
+    /* Loading & Toast */
+    #loader {
+      position: fixed; inset: 0; background: var(--bg-dark); z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px;
+    }
+    .spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Print Template */
+    #print-template {
+      position: absolute; left: -9999px; top: -9999px; width: 1000px; background: white;
+      padding: 30px; color: #111827; font-family: sans-serif;
+    }
+    .print-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; margin-bottom: 15px; }
+    .print-map-container { width: 100%; height: 600px; border: 1px solid #ccc; margin-bottom: 15px; }
+    .print-footer { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; font-size: 12px; color: #4b5563; }
+    .print-legend { display: flex; flex-wrap: wrap; gap: 10px; }
+    .print-legend-item { display: flex; align-items: center; gap: 6px; }
+    .print-legend-color { width: 14px; height: 14px; border: 1px solid #ccc; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .dashboard { grid-template-columns: 1fr; }
+      .sidebar { display: none; position: fixed; top: 0; left: 0; z-index: 2000; width: 100%; height: 100%; }
+      .sidebar.active { display: flex; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Loader -->
+  <div id="loader">
+    <div class="spinner"></div>
+    <div>Chargement des données & cartographie...</div>
+  </div>
+
+  <div class="dashboard">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="logo"><i class="fa-solid fa-layer-group"></i> Dashboard Douars</div>
+      
+      <div class="search-box">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" id="search-input" placeholder="Rechercher par nom, code, commune...">
+      </div>
+
+      <div class="legend-panel">
+        <h3>Légende</h3>
+        <div id="legend-container"></div>
+      </div>
+
+      <div class="controls">
+        <button class="btn btn-outline" id="reset-view"><i class="fa-solid fa-crosshairs"></i> Réinitialiser la vue</button>
+        <button class="btn btn-primary" id="export-pdf"><i class="fa-solid fa-file-pdf"></i> Exporter en PDF</button>
+      </div>
+    </aside>
+
+    <!-- Map -->
+    <main class="map-wrapper">
+      <div class="map-title">Délimitation des Douars - Maroc Nord (Marchiche)</div>
+      <div id="map"></div>
+      <div class="north-arrow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2l-7 7h4v8h6v-8h4z"></path>
+        </svg>
+      </div>
+      <div class="coord-grid" id="coord-display">Coordonnées: --</div>
+    </main>
+  </div>
+
+  <!-- Hidden Print Template -->
+  <div id="print-template">
+    <div class="print-header">
+      <h2>Délimitation des Douars - Région Nord</h2>
+      <span id="print-date"></span>
+    </div>
+    <div class="print-map-container" id="print-map-target"></div>
+    <div class="print-footer">
+      <div>
+        <strong>Projection:</strong> Merchich Maroc Nord 1 (EPSG:26191)<br>
+        <strong>Source:</strong> GeoJSON Polygones<br>
+        <strong>Échelle:</strong> <span id="print-scale">--</span>
+      </div>
+      <div class="print-legend" id="print-legend"></div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.js"></script>
+  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <script>
+    // 1. Configuration Projection EPSG:26191 (Merchich Maroc Nord)
+    proj4.defs('EPSG:26191', '+proj=lcc +lat_1=33.3 +lat_0=33.3 +lon_0=-5.4 +k_0=0.999625769 +x_0=500000 +y_0=300000 +a=6376896.84 +b=6355743.18 +towgs84=31,146,47,0,0,0,0 +units=m +no_defs');
+    proj4.defs('EPSG:4326', '+proj=longlat +datum=WGS84 +no_defs');
+
+    // 2. Initialisation Map
+    const map = L.map('map', {
+      zoomControl: false,
+      attributionControl: true
+    }).setView([34.0, -5.5], 10);
+
+    L.control.zoom({ position: 'topright' }).addTo(map);
+    L.control.scale({ position: 'bottomleft', maxWidth: 150 }).addTo(map);
+
+    // Tuiles OpenStreetMap (CORS autorisé pour html2canvas)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors',
+      crossOrigin: 'anonymous'
+    }).addTo(map);
+
+    // 3. Transformation GeoJSON 26191 -> 4326
+    function transformGeoJSON(gj) {
+      const transformer = (coords) => proj4('EPSG:26191', 'EPSG:4326', coords);
+      return {
+        ...gj,
+        features: gj.features.map(f => {
+          const geom = f.geometry;
+          const transformRing = ring => ring.map(c => transformer(c));
+          if (geom.type === 'Polygon') geom.coordinates = geom.coordinates.map(transformRing);
+          else if (geom.type === 'MultiPolygon') geom.coordinates = geom.coordinates.map(poly => poly.map(transformRing));
+          return f;
+        })
+      };
+    }
+
+    // 4. Chargement & Rendu
+    let douarsLayer;
+    let originalFeatures = [];
+
+    async function loadData() {
+      try {
+        // Remplacez par le chemin réel ou utilisez un serveur local (npm serve, python -m http.server)
+        const response = await fetch('Délimitation des Douars.geojson');
+        if (!response.ok) throw new Error('Fichier non trouvé');
+        const rawGeoJSON = await response.json();
+        
+        const transformed = transformGeoJSON(rawGeoJSON);
+        originalFeatures = transformed.features;
+
+        douarsLayer = L.geoJSON(transformed, {
+          style: () => ({
+            color: '#3b82f6',
+            weight: 2,
+            fillColor: '#93c5fd',
+            fillOpacity: 0.6
+          }),
+          onEachFeature: (feature, layer) => {
+            const props = feature.properties;
+            const popupContent = `
+              <div style="font-family:sans-serif; min-width:200px;">
+                <h3 style="margin:0 0 8px; border-bottom:1px solid #ccc; padding-bottom:5px;">${props.nom_douar || props.name || 'Douar inconnu'}</h3>
+                <p><strong>Code:</strong> ${props.code || 'N/A'}</p>
+                <p><strong>Commune:</strong> ${props.commune || 'N/A'}</p>
+                <p><strong>Surface (est.):</strong> ${props.surface_ha ? props.surface_ha + ' ha' : 'N/A'}</p>
+              </div>`;
+            layer.bindPopup(popupContent);
+          }
+        }).addTo(map);
+
+        // Ajuster la vue
+        map.fitBounds(douarsLayer.getBounds(), { padding: [20, 20] });
+        buildLegend();
+        document.getElementById('loader').style.display = 'none';
+
+      } catch (err) {
+        document.getElementById('loader').innerHTML = `<div style="color:#ef4444; text-align:center;">❌ Erreur: ${err.message}<br>⚠️ Assurez-vous que le fichier GeoJSON est accessible (serveur local requis).</div>`;
+        console.error(err);
+      }
+    }
+
+    // 5. Légende dynamique
+    function buildLegend() {
+      const container = document.getElementById('legend-container');
+      const printContainer = document.getElementById('print-legend');
+      const items = [
+        { color: '#93c5fd', label: 'Limites des Douars' }
+      ];
+      const html = items.map(i => `<div class="legend-item"><div class="legend-color" style="background:${i.color}"></div>${i.label}</div>`).join('');
+      container.innerHTML = html;
+      printContainer.innerHTML = items.map(i => `<div class="print-legend-item"><div class="print-legend-color" style="background:${i.color}"></div>${i.label}</div>`).join('');
+    }
+
+    // 6. Recherche
+    document.getElementById('search-input').addEventListener('input', (e) => {
+      const term = e.target.value.toLowerCase().trim();
+      if (!douarsLayer || !originalFeatures.length) return;
+
+      douarsLayer.eachLayer(l => map.removeLayer(l));
+      douarsLayer.clearLayers();
+
+      const filtered = originalFeatures.filter(f => {
+        const p = f.properties;
+        return Object.values(p).some(v => String(v).toLowerCase().includes(term));
+      });
+
+      L.geoJSON({ type: 'FeatureCollection', features: filtered }, {
+        style: () => ({ color: '#f59e0b', weight: 3, fillColor: '#fde68a', fillOpacity: 0.7 }),
+        onEachFeature: (f, l) => {
+          l.bindPopup(`<b>${f.properties.nom_douar || f.properties.name || 'Douar'}</b>`);
+          l.addTo(douarsLayer);
+        }
+      }).addTo(map);
+
+      if (filtered.length > 0) map.fitBounds(douarsLayer.getBounds(), { padding: [30, 30] });
+      else document.getElementById('search-input').style.borderColor = '#ef4444';
+      document.getElementById('search-input').style.borderColor = '';
+    });
+
+    // 7. Reset
+    document.getElementById('reset-view').addEventListener('click', () => {
+      document.getElementById('search-input').value = '';
+      loadData(); // Recharge tout
+    });
+
+    // 8. Export PDF Professionnel
+    document.getElementById('export-pdf').addEventListener('click', async () => {
+      const btn = document.getElementById('export-pdf');
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Génération...`;
+      btn.disabled = true;
+
+      try {
+        // Préparer le template
+        const template = document.getElementById('print-template');
+        document.body.appendChild(template);
+        template.style.left = '0';
+        template.style.top = '0';
+
+        // Copier le contenu du map vers le print container
+        const mapTarget = document.getElementById('print-map-target');
+        mapTarget.innerHTML = '';
+        const printMap = L.map(mapTarget, { zoomControl: false, attributionControl: false, dragging: false }).setView(map.getCenter(), map.getZoom());
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { crossOrigin: 'anonymous' }).addTo(printMap);
+        L.geoJSON(douarsLayer.toGeoJSON(), { style: () => ({ color: '#3b82f6', weight: 2, fillColor: '#93c5fd', fillOpacity: 0.6 }) }).addTo(printMap);
+        
+        await new Promise(r => setTimeout(r, 500)); // Attendre le rendu des tuiles
+        printMap.fitBounds(map.getBounds());
+
+        // Mettre à jour métadonnées
+        document.getElementById('print-date').textContent = `Date: ${new Date().toLocaleDateString('fr-FR')}`;
+        document.getElementById('print-scale').textContent = `~1:${Math.round(591657550 / Math.pow(2, map.getZoom()))}`;
+
+        // Capture
+        const canvas = await html2canvas(template, { useCORS: true, scale: 2 });
+        document.body.removeChild(template);
+        template.style.left = '-9999px';
+
+        // PDF
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('l', 'mm', 'a4');
+        const imgData = canvas.toDataURL('image/png');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save('Carte_Douars_Maroc_Nord.pdf');
+
+      } catch (err) {
+        alert('Erreur lors de la génération du PDF: ' + err.message);
+        console.error(err);
+      } finally {
+        btn.innerHTML = `<i class="fa-solid fa-file-pdf"></i> Exporter en PDF`;
+        btn.disabled = false;
+      }
+    });
+
+    // Suivi coordonnées
+    map.on('mousemove', (e) => {
+      document.getElementById('coord-display').textContent = `Lat: ${e.latlng.lat.toFixed(5)} | Lon: ${e.latlng.lng.toFixed(5)}`;
+    });
+
+    // Démarrage
+    loadData();
+  </script>
+</body>
+</html>
