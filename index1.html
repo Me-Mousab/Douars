@@ -220,7 +220,7 @@
     async function loadData() {
       try {
         // Remplacez par le chemin réel ou utilisez un serveur local (npm serve, python -m http.server)
-        const response = await fetch('Délimitation des Douars.geojson');
+        const response = await fetch('Data/Délimitation des Douars.geojson');
         if (!response.ok) throw new Error('Fichier non trouvé');
         const rawGeoJSON = await response.json();
         
