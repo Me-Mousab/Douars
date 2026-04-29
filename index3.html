@@ -212,9 +212,9 @@
     async function loadData() {
       try {
         const [douarsRes, communeRes, zoneRes] = await Promise.allSettled([
-          fetch('Délimitation des Douars.geojson'),
-          fetch('Communes.geojson').catch(() => null),
-          fetch('Zone Remembrée.geojson').catch(() => null)
+          fetch('Data/Délimitation des Douars.geojson'),
+          fetch('Data/Commune.geojson').catch(() => null),
+          fetch('Data/Zone Remembrée.geojson').catch(() => null)
         ]);
 
         // Douars
