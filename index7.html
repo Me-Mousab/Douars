@@ -925,7 +925,7 @@
 
     async function loadData() {
       try {
-        const res = await fetch('Délimitation des Douars.geojson');
+        const res = await fetch('Data/Délimitation des Douars.geojson');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = transformGeoJSON(await res.json());
         originalFeatures = data.features;
