@@ -112,7 +112,7 @@
 
       <div class="table-container">
         <table id="douars-table">
-          <thead><tr><th>Nom</th><th>Code</th><th>Commune</th><th>Surface (ha)</th><th>Action</th></tr></thead>
+          <thead><tr><th>Commune</th><th>Douar</th><th>Surface (ha)</th><th>Nb Habitants</th><th>Action</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -197,10 +197,10 @@
         const p = f.properties;
         const row = document.createElement('tr');
         row.innerHTML = `
-          <td>${p.nom_douar || p.NOM_DOUAR || p.Name || '-'}</td>
-          <td>${p.code || p.CODE || '-'}</td>
-          <td>${p.commune || p.COMMUNE || '-'}</td>
-          <td>${parseFloat(p.surface || p.surface_ha || 0).toFixed(1)}</td>
+          <td>${p.COMMUNE || '-'}</td>
+          <td>${p.DOUAR || '-'}</td>
+          <td>${parseFloat(p["SUP EN HA"] || 0).toFixed(1)}</td>
+          <td>${p["NB HABITAN"] || '-'}</td>
           <td><button class="table-btn"><i class="fa-solid fa-eye"></i></button></td>`;
         row.addEventListener('click', () => selectFeature(f, row));
         row.querySelector('.table-btn').addEventListener('click', e => { e.stopPropagation(); selectFeature(f, row); });
@@ -246,7 +246,7 @@
     // Map Load & Init
     async function loadData() {
       try {
-        const res = await fetch('Data/Délimitation des Douars.geojson');
+        const res = await fetch('Data/Douars V2.geojson');
         if(!res.ok) throw new Error('Fichier introuvable');
         const transformed = transformGeoJSON(await res.json());
         
