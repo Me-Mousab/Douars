@@ -124,6 +124,14 @@
     .coord-container { max-height: 350px; overflow-y: auto; border: 2px solid var(--border); border-radius: 8px; background: var(--bg-dark); }
     .modal-actions { display: flex; gap: 12px; margin-top: 30px; padding-top: 25px; border-top: 2px solid var(--border); }
     .modal-actions .btn { flex: 1; }
+
+    /* Modal pour le PDF */
+    .pdf-viewer-modal { background: var(--bg-card); border: 2px solid var(--border); border-radius: 12px; padding: 20px; width: 95%; max-width: 1100px; height: 90vh; display: flex; flex-direction: column; position: relative; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+    .pdf-viewer-modal .modal-header { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 2px solid var(--border); flex-shrink: 0; }
+    .pdf-iframe-wrap { flex: 1; border-radius: 8px; overflow: hidden; border: 2px solid var(--border); background: #fff; }
+    .pdf-iframe-wrap iframe { width: 100%; height: 100%; border: none; }
+    .pdf-unavailable { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 15px; color: var(--text-muted); }
+    .pdf-unavailable i { font-size: 4rem; color: var(--border); }
     
     /* Filtres */
     .filter-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 20px 0; }
@@ -282,7 +290,8 @@
         <div class="resizer" id="resizer"></div>
         <div class="table-pane">
           <div class="table-header"><span><i class="fa-solid fa-table"></i> Table des Douars</span><span id="table-count" style="font-size:0.85rem; opacity:0.9">0 résultats</span></div>
-          <div class="table-scroll"><table id="douars-table"><thead><tr><th>Nom</th><th>Code</th><th>Commune</th><th>Province</th><th>Surface</th></tr></thead><tbody></tbody></table></div>
+          <div class="table-scroll"><table id="douars-table"><thead><tr><th>Province</th><th>Commune</th><th>Douar</th><th>Surface</th><th>Nombre d'habitants</th></tr></thead><tbody></tbody></table></div>
+          <div style="bottom: 10px; left: 10px; background: rgba(30,41,59,0.9); padding: 5px 8px; border-radius: 4px; font-size: 0.7rem; z-index: 1000; color: var(--text-muted);">Built by M.Oualla</div>
         </div>
       </div>
     </main>
@@ -316,7 +325,7 @@
       <button class="modal-close" onclick="closeModal('modal-details')">&times;</button>
       <div class="modal-header"><div class="modal-title" id="modal-title">Douar</div><div class="modal-subtitle" id="modal-subtitle">Fiche technique détaillée</div></div>
       <div class="info-grid" id="modal-info">
-        <div class="info-card"><label>Code</label><value id="info-code">-</value></div>
+        <div class="info-card"><label>Nombre d'habitants</label><value id="info-code">-</value></div>
         <div class="info-card"><label>Commune</label><value id="info-commune">-</value></div>
         <div class="info-card"><label>Cercle</label><value id="info-cercle">-</value></div>
         <div class="info-card"><label>Province</label><value id="info-province">-</value></div>
@@ -327,7 +336,33 @@
       <div class="coord-container"><table class="coord-table" id="modal-coords"><thead><tr><th>Point</th><th>X (Lambert)</th><th>Y (Lambert)</th><th>Latitude</th><th>Longitude</th></tr></thead><tbody></tbody></table></div>
       <div class="modal-actions">
         <button class="btn btn-primary" onclick="zoomToFeature()"><i class="fa-solid fa-magnifying-glass-plus"></i> Zoomer</button>
+          <button class="btn btn-warning" id="btn-view-pdf" onclick="openPDFViewer()" style="display:none;"><i class="fa-solid fa-eye"></i> Voir PDF signé</button>
         <button class="btn btn-success" onclick="exportPDF()"><i class="fa-solid fa-file-pdf"></i> Exporter PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Visionneuse PDF -->
+  <div class="modal-overlay" id="modal-pdf">
+    <div class="pdf-viewer-modal">
+      <button class="modal-close" onclick="closeModal('modal-pdf')" style="position:absolute; top:15px; right:15px;">&times;</button>
+      <div class="modal-header">
+        <div class="modal-title" id="pdf-viewer-title" style="font-size:1.3rem;">
+          <i class="fa-solid fa-file-pdf" style="color:#ef4444;"></i> Document PDF
+        </div>
+        <div class="modal-subtitle" id="pdf-viewer-subtitle">Document officiel délimitation</div>
+      </div>
+      <div class="pdf-iframe-wrap" id="pdf-iframe-wrap">
+        <div class="pdf-unavailable" id="pdf-unavailable" style="display:none;">
+          <i class="fa-solid fa-file-circle-xmark"></i>
+          <strong>Document non disponible</strong>
+          <p style="font-size:0.85rem; text-align:center;">Le fichier PDF n'a pas pu être chargé.<br>Vérifiez que le chemin <code id="pdf-missing-path" style="background:var(--bg-dark); padding:2px 6px; border-radius:4px; font-size:0.8rem;"></code> est accessible.</p>
+        </div>
+        <iframe id="pdf-viewer-iframe" src="" style="display:none;"></iframe>
+      </div>
+      <div style="display:flex; gap:10px; margin-top:15px; flex-shrink:0;">
+        <a id="pdf-download-link" href="#" download class="btn btn-success" style="text-decoration:none; flex:1;"><i class="fa-solid fa-download"></i> Télécharger le PDF</a>
+        <button class="btn btn-outline" onclick="closeModal('modal-pdf')" style="flex:1;"><i class="fa-solid fa-times"></i> Fermer</button>
       </div>
     </div>
   </div>
@@ -372,7 +407,6 @@
     </div>
     <div style="margin-top:30px; text-align:center; font-size:11px; border-top:2px solid var(--primary); padding-top:15px;">Document généré automatiquement</div>
   </div>
-
   <!--<footer style="position:fixed; bottom:0; left:0; right:0; background:var(--bg-card); border-top:1px solid var(--border); padding:8px 20px; font-size:0.75rem; color:var(--text-muted); text-align:center; z-index:999;">
     <i class="fa-solid fa-code"></i> Développé par <strong><a mail-to="mousab.oualla@gmail.com">M.OUALLA</a></strong> | © <span id="current-year"></span> Agence Urbaine d'El Jadida - Sidi Bennour
   </footer>-->
@@ -431,9 +465,9 @@
 
     const overlayLayers = {};
     const layerConfigs = [
-      { id: 'douars', name: 'Douars', icon: '📍', color: '#3b82f6', type: 'fill', file: 'Data/Délimitation des Douars.geojson', enabled: true },
-      { id: 'communes', name: 'Communes', icon: '🏛️', color: '#1de05b', type: 'line', file: 'Data/Commune.geojson', enabled: false },
-      { id: 'provinces', name: 'Provinces', icon: '🏛️', color: '#3d0773', type: 'line', file: 'Data/Province.geojson', enabled: false }
+      { id: 'douars', name: 'Douars', icon: '📍', color: '#FFBD00', type: 'fill', file: 'Data/New Data Douars V2.geojson', enabled: true },
+      { id: 'communes', name: 'Communes', icon: '🏛️', color: '#00C3AF', type: 'line', file: 'Data/Commune.geojson', enabled: false },
+      { id: 'provinces', name: 'Provinces', icon: '🏛️', color: '#FF3747', type: 'line', file: 'Data/Province.geojson', enabled: false }
     ];
     
     let douarsLayer, originalFeatures = [], filteredFeatures = [], currentFeature = null, currentLayer = null;
@@ -512,7 +546,7 @@
     function buildTable(features) {
       const tbody = document.querySelector('#douars-table tbody');
       document.getElementById('table-count').textContent = `${features.length} résultat${features.length > 1 ? 's' : ''}`;
-      tbody.innerHTML = features.map(f => { const p = f.properties || {}; return `<tr><td><strong>${p.DOUAR || '-'}</strong></td><td>${p.CODE || '-'}</td><td>${p.COMMUNE || '-'}</td><td>${p.PROVINCE || '-'}</td><td>${getAreaHA(f).toFixed(2)}</td></tr>`; }).join('');
+      tbody.innerHTML = features.map(f => { const p = f.properties || {}; return `<tr><td>${p.PROVINCE || '-'}</td><td>${p.COMMUNE || '-'}</td><td><strong>${p.DOUAR || '-'}</strong></td><td>${getAreaHA(f).toFixed(2)}</td><td>${p['NB HABITAN'] || '-'}</td></tr>`; }).join('');
       tbody.querySelectorAll('tr').forEach((row, idx) => row.addEventListener('click', () => selectFeatureByRow(row, features[idx])));
     }
 
@@ -534,7 +568,7 @@
       const p = f.properties || {};
       document.getElementById('modal-title').textContent = p.DOUAR || 'Douar';
       document.getElementById('modal-subtitle').textContent = `Code: ${p.CODE || 'N/A'} | ${p.COMMUNE || 'N/A'}`;
-      document.getElementById('info-code').textContent = p.CODE || '-';
+      document.getElementById('info-code').textContent = p['NB HABITAN'] || '-';
       document.getElementById('info-commune').textContent = p.COMMUNE || '-';
       document.getElementById('info-cercle').textContent = p.CERCLE || '-';
       document.getElementById('info-province').textContent = p.PROVINCE || '-';
@@ -543,11 +577,59 @@
       document.getElementById('info-vertices').textContent = coords.length;
       document.querySelector('#modal-coords tbody').innerHTML = coords.map((c, i) => { const lambert = proj4('EPSG:4326', 'EPSG:26191', c); return `<tr><td><strong>B${i+1}</strong></td><td>${lambert[0].toFixed(3)}</td><td>${lambert[1].toFixed(3)}</td><td>${c[1].toFixed(6)}</td><td>${c[0].toFixed(6)}</td></tr>`; }).join('');
       document.getElementById('modal-details').classList.add('active');
+      // Affichage conditionnel du bouton PDF
+      const cheminPDF = (p['CHEMIN PDF'] || p.CHEMIN_PDF || p.chemin_pdf || '').trim();
+      const btnPDF = document.getElementById('btn-view-pdf');
+      if (cheminPDF) {
+        btnPDF.style.display = 'inline-flex';
+        btnPDF.title = cheminPDF;
+      } else {
+        btnPDF.style.display = 'none';
+      }
     }
 
     function closeModal(id) { document.getElementById(id).classList.remove('active'); if (id === 'modal-details') { if (currentLayer) currentLayer.setStyle({ color: '#3b82f6', fillColor: '#93c5fd', fillOpacity: 0.6, weight: 2 }); currentFeature = null; currentLayer = null; document.querySelectorAll('#douars-table tr.active').forEach(r => r.classList.remove('active')); } }
 
     function zoomToFeature() { if (currentLayer) map.fitBounds(currentLayer.getBounds(), { padding: [50, 50] }); }
+
+    function openPDFViewer() {
+      if (!currentFeature) return;
+      const p = currentFeature.properties || {};
+      //const cheminPDF = p['CHEMIN PDF'] || p.CHEMIN_PDF || p.chemin_pdf || '';
+      const BASE_URL = 'https://geoportail-invest.auejsb.ma/';
+      const cheminRelatif = (p['CHEMIN PDF'] || p.CHEMIN_PDF || p.chemin_pdf || '').trim();
+      const cheminPDF = cheminRelatif ? BASE_URL + cheminRelatif : '';
+      const nomDouar = p.DOUAR || 'Douar';
+      const ref = p.REF || '';
+
+      document.getElementById('pdf-viewer-title').innerHTML = `<i class="fa-solid fa-file-pdf" style="color:#ef4444;"></i> ${nomDouar}`;
+      document.getElementById('pdf-viewer-subtitle').textContent = ref ? `Réf: ${ref}` : 'Document officiel de délimitation';
+
+      const iframe = document.getElementById('pdf-viewer-iframe');
+      const unavailable = document.getElementById('pdf-unavailable');
+      const downloadLink = document.getElementById('pdf-download-link');
+
+      if (cheminPDF) {
+        iframe.src = cheminPDF;
+        iframe.style.display = 'block';
+        unavailable.style.display = 'none';
+        downloadLink.href = cheminPDF;
+        downloadLink.download = `${nomDouar.replace(/\s+/g, '_')}.pdf`;
+        // Détection d'erreur de chargement iframe
+        iframe.onerror = () => {
+          iframe.style.display = 'none';
+          unavailable.style.display = 'flex';
+          document.getElementById('pdf-missing-path').textContent = cheminPDF;
+        };
+      } else {
+        iframe.style.display = 'none';
+        unavailable.style.display = 'flex';
+        document.getElementById('pdf-missing-path').textContent = '(chemin non renseigné)';
+        downloadLink.href = '#';
+      }
+
+      document.getElementById('modal-pdf').classList.add('active');
+    }
 
     function searchByCoords() {
       const x = parseFloat(document.getElementById('coord-x').value), y = parseFloat(document.getElementById('coord-y').value), system = document.querySelector('input[name="coord-system"]:checked').value;
